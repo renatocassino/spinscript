@@ -6,7 +6,6 @@ public enum TokenType {
     RPAREN,
     LBRACE,
     RBRACE,
-    AT,
     LOOP,
     PLAY,
     EOF,

@@ -41,7 +41,6 @@ public class Lexer
                 case '(': AddToken(TokenType.LPAREN, currentChar.ToString()); break;
                 case ')': AddToken(TokenType.RPAREN, currentChar.ToString()); break;
                 default:
-
                     throw new LexerException($"Unexpected character '{currentChar}' at index {index}");
                     break;
             }
