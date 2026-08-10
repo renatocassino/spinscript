@@ -11,6 +11,15 @@ public class Lexer
         this.input = input;
     }
 
+    private static readonly Dictionary<string, TokenType> Keywords = new()
+    {
+        ["loop"]    = TokenType.LOOP,
+        ["play"]    = TokenType.PLAY,
+        ["song"]    = TokenType.SONG,
+        ["repeat"]  = TokenType.REPEAT,
+    };
+
+
     public List<Token> Tokenize()
     {
         tokens = [];
@@ -58,7 +67,22 @@ public class Lexer
 
     private void AddReservedWord()
     {
+        int start = index;
+        index++;
+        while (index < input.Length &&
+            (char.IsLetterOrDigit(input[index]) || input[index] == '_'))
+        {
+            index++;
+        }
 
+        var word = input[start..index];
+
+        if (Keywords.TryGetValue(word, out var keywordType)) {
+            tokens.Add(new Token(keywordType, word));
+            return;
+        }
+
+        tokens.Add(new Token(TokenType.IDENT, word));
     }
 
     private void AddNumberToken()

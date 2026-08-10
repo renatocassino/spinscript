@@ -9,5 +9,8 @@ public enum TokenType {
     LOOP,
     PLAY,
     EOF,
+    REPEAT,
     REFERENCE,
+    IDENT,
+    SONG,
 }
