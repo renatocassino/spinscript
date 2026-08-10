@@ -17,16 +17,32 @@ public class Lexer
         while (index < input.Length)
         {
             var currentChar = input[index];
+            if (char.IsWhiteSpace(currentChar)) {
+                index++;
+                continue;
+            }
+
+            if (char.IsDigit(currentChar)) {
+                AddNumberToken();
+                continue;
+            }
+
+            if (char.IsLetter(currentChar)) {
+                AddReservedWord();
+                continue;
+            }
+
             switch (currentChar) {
-                case ' ': index++; break;
                 case '@': AddVariableReferenceToken(); break;
-                case '=': AddEqualToken(); break;
-                case ';': AddSemiColon(); break;
-                default: 
-                    if (char.IsDigit(currentChar))
-                        AddNumberToken();
-                    else
-                        index++;
+                case '=': AddToken(TokenType.EQUALS, currentChar.ToString()); break;
+                case ';': AddToken(TokenType.SEMICOLON, currentChar.ToString()); break;
+                case '{': AddToken(TokenType.LBRACE, currentChar.ToString()); break;
+                case '}': AddToken(TokenType.RBRACE, currentChar.ToString()); break;
+                case '(': AddToken(TokenType.LPAREN, currentChar.ToString()); break;
+                case ')': AddToken(TokenType.RPAREN, currentChar.ToString()); break;
+                default:
+
+                    throw new LexerException($"Unexpected character '{currentChar}' at index {index}");
                     break;
             }
         }
@@ -36,15 +52,14 @@ public class Lexer
         return tokens;
     }
 
-    private void AddSemiColon() {
-        tokens.Add(new Token(TokenType.SEMICOLON, ";"));
+    private void AddToken(TokenType t, string v) {
+        tokens.Add(new Token(t, v));
         index++;
     }
 
-    private void AddEqualToken()
+    private void AddReservedWord()
     {
-        tokens.Add(new Token(TokenType.EQUALS, "="));
-        index++;
+
     }
 
     private void AddNumberToken()
