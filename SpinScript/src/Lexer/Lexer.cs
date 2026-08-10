@@ -1,5 +1,4 @@
 namespace SpinScript.Lexer;
-using System.Text.RegularExpressions;
 
 public class Lexer
 {
@@ -19,20 +18,20 @@ public class Lexer
         {
             var currentChar = input[index];
             switch (currentChar) {
-                case ' ': break;
+                case ' ': index++; break;
                 case '@': AddVariableReferenceToken(); break;
                 case '=': AddEqualToken(); break;
                 case ';': AddSemiColon(); break;
-                default: break;
+                default: 
+                    if (char.IsDigit(currentChar))
+                        AddNumberToken();
+                    else
+                        index++;
+                    break;
             }
-
-            if (int.TryParse(currentChar.ToString(), out int result)) {
-                AddNumberToken();
-            }
-            index++;
         }
 
-        tokens.Add(new Token(TokenType.EOF, @"EOF"));
+        tokens.Add(new Token(TokenType.EOF, ""));
 
         return tokens;
     }
@@ -65,25 +64,28 @@ public class Lexer
         } else {
             throw new Exception("Invalid convertion to integer");
         }
-        index += number.Length - 1;
+        index += number.Length;
     }
 
     private void AddVariableReferenceToken()
     {
-        var reference = "";
-        for (int i = index + 1; i < input.Length; i++)
+        index++;
+
+        if (index >= input.Length || !char.IsLetter(input[index]))
         {
-            if (Regex.IsMatch(input[i].ToString(), "^[a-zA-Z0-9]$")) {
-                reference += input[i];
-                continue;
-            }
-            break;
+            throw new LexerException(
+                $"A reference name must start with a letter at index {index}.");
         }
 
-        if (reference.Length == 0) {
-            throw new Exception("Invalid variable reference");
+        int start = index;
+        while (index < input.Length &&
+            (char.IsLetterOrDigit(input[index]) || input[index] == '_'))
+        {
+            index++;
         }
-        index += reference.Length;
+
+        var reference = input[start..index];
         tokens.Add(new Token(TokenType.REFERENCE, reference));
+
     }
 }
