@@ -4,7 +4,7 @@ using Xunit;
 public class TokenizerTests
 {
     [Fact]
-    public void TokenizeSimpleAssignment_ReturnsCorrectTokens()
+    public void TokenizeSimpleAssignmentReturnsCorrectTokens()
     {
         var tokens = new Lexer("@bpm = 129;").Tokenize();
 
@@ -125,7 +125,7 @@ public class TokenizerTests
     [InlineData("    @bpm    =    129    ;     \n\n")]
     [InlineData("\n@bpm\n=\n129\n;\n")]
     [InlineData("\t@bpm \t= \t129;\t\n")]
-    public void TokenizeSimpleAssignment_WithDifferentChars(string input)
+    public void TokenizeSimpleAssignmentWithDifferentChars(string input)
     {
         var tokens = new Lexer(input).Tokenize();
 
@@ -176,7 +176,7 @@ public class TokenizerTests
     [InlineData("@$var = 1;")]        // começa com símbolo
     [InlineData("@ = 1;")]            // referência vazia (@ seguido de espaço)
     [InlineData("@;")]                // @ seguido direto de símbolo
-    public void TokenizeInvalidInput_Throws(string input)
+    public void TokenizeInvalidInputThrows(string input)
     {
         Assert.Throws<LexerException>(() => new Lexer(input).Tokenize());
     }
@@ -193,7 +193,7 @@ public class TokenizerTests
     [InlineData("play", TokenType.PLAY)]
     [InlineData("song", TokenType.SONG)]
     [InlineData("repeat", TokenType.REPEAT)]
-    public void TokenizeKeywords_ReturnsCorrespondingTokenType(string keyword, TokenType expected)
+    public void TokenizeKeywordsReturnsCorrespondingTokenType(string keyword, TokenType expected)
     {
         var tokens = new Lexer(keyword).Tokenize();
 
@@ -208,7 +208,7 @@ public class TokenizerTests
     [InlineData("my_track")]
     [InlineData("my_track_2")]
     [InlineData("a1_2b")]
-    public void TokenizeIdentifiers_LetterFollowedByLettersDigitsUnderscore_ReturnsIdent(string word)
+    public void TokenizeIdentifiersLetterFollowedByLettersDigitsUnderscore_ReturnsIdent(string word)
     {
         var tokens = new Lexer(word).Tokenize();
 
@@ -218,7 +218,7 @@ public class TokenizerTests
     }
 
     [Fact]
-    public void TokenizeIdentifier_StopsAtNonWordCharacter()
+    public void TokenizeIdentifierStopsAtNonWordCharacter()
     {
         var tokens = new Lexer("track1;").Tokenize();
 
@@ -235,7 +235,7 @@ public class TokenizerTests
     [InlineData("}", TokenType.RBRACE)]
     [InlineData("=", TokenType.EQUALS)]
     [InlineData(";", TokenType.SEMICOLON)]
-    public void TokenizeSymbols_ReturnsCorrespondingTokenType(string symbol, TokenType expected)
+    public void TokenizeSymbolsReturnsCorrespondingTokenType(string symbol, TokenType expected)
     {
         var tokens = new Lexer(symbol).Tokenize();
 
@@ -249,7 +249,7 @@ public class TokenizerTests
     [InlineData("7", "7")]
     [InlineData("129", "129")]
     [InlineData("00042", "42")]
-    public void TokenizeNumbers_ReturnsNumberToken(string input, string expectedValue)
+    public void TokenizeNumbersReturnsNumberToken(string input, string expectedValue)
     {
         var tokens = new Lexer(input).Tokenize();
 
@@ -258,7 +258,7 @@ public class TokenizerTests
     }
 
     [Fact]
-    public void TokenizeEmptyInput_ReturnsOnlyEof()
+    public void TokenizeEmptyInputReturnsOnlyEof()
     {
         var tokens = new Lexer("").Tokenize();
 
@@ -268,7 +268,7 @@ public class TokenizerTests
     }
 
     [Fact]
-    public void TokenizeWhitespaceOnlyInput_ReturnsOnlyEof()
+    public void TokenizeWhitespaceOnlyInputReturnsOnlyEof()
     {
         var tokens = new Lexer("   \t\n\n  ").Tokenize();
 
@@ -277,13 +277,13 @@ public class TokenizerTests
     }
 
     [Fact]
-    public void TokenizeUnexpectedCharacter_Throws()
+    public void TokenizeUnexpectedCharacterThrows()
     {
         Assert.Throws<LexerException>(() => new Lexer("#").Tokenize());
     }
 
     [Fact]
-    public void TokenizeFullSongBlock_ReturnsExpectedTokenSequence()
+    public void TokenizeFullSongBlockReturnsExpectedTokenSequence()
     {
         var tokens = new Lexer("song { loop repeat @times { play @track; } }").Tokenize();
 

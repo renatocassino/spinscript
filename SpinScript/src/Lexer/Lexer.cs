@@ -150,6 +150,7 @@ public class Lexer
         {
             throw new LexerException("Invalid convertion to integer");
         }
+
         _index += number.Length;
     }
 

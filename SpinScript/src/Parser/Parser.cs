@@ -1,47 +1,50 @@
 namespace SpinScript.Parser;
 
 using SpinScript.Lexer;
+using Ast;
 
 public class Parser
 {
-    private Dictionary<string, string> variables = new();
-    private List<Token> tokens = [];
+    public int index;
+    private readonly List<Token> tokens = [];
 
     public Parser(string input)
     {
         tokens = new Lexer(input).Tokenize();
+        index = 0;
     }
 
-    public void Parse()
+    public ProgramNode Parse()
     {
-        while (true)
+        var statements = new List<AstNode>();
+
+        while (index < tokens.Count)
         {
-            if (tokens.Count == 0)
-            {
-                break;
-            }
-            var token = tokens[0];
+            var token = tokens[index];
 
             switch (token.Type)
             {
-                case TokenType.REFERENCE: ParseReference(); break;
+                case TokenType.REFERENCE: statements.Add(ParseReference()); break;
                 case TokenType.EOF: ParseEOF(); break;
                 default:
-                    throw new ParserException($"Cannot parse token {token.Type} with value {token.Value}");
+                    throw new ParserException($"Cannot parse token '{token.Type}' with value '{token.Value}'");
             }
         }
+
+        return new ProgramNode(statements);
     }
 
     public void ParseEOF()
     {
         Consume(TokenType.EOF);
-        if (tokens.Count > 0)
+        index++;
+        if (index < tokens.Count)
         {
-            throw new ParserException($"Cannot read more tokens after EOF. Found more {tokens.Count} tokens.");
+            throw new ParserException($"Cannot read more tokens after EOF. Found more '{tokens.Count}' tokens.");
         }
     }
 
-    public void ParseReference()
+    public Ast.AssignmentNode ParseReference()
     {
         var currentToken = Consume(TokenType.REFERENCE);
 
@@ -50,24 +53,19 @@ public class Parser
         var value = Consume(TokenType.NUMBER);
         Consume(TokenType.SEMICOLON);
 
-        if (variables.ContainsKey(varName))
-        {
-            throw new ParserException($"Variable '{varName}' is already defined");
-        }
-
-        variables[varName] = value.Value;
+        return new AssignmentNode(varName, value.Value);
     }
 
     public Token Consume(TokenType expected)
     {
-        var firstToken = tokens[0];
-        tokens.RemoveAt(0);
+        var firstToken = tokens[index];
+        index++;
 
         if (expected == firstToken.Type)
         {
             return firstToken;
         }
 
-        throw new ParserException($"Expected token {expected} but received token {firstToken}.");
+        throw new ParserException($"Expected token '{expected}' but received token '{firstToken}'.");
     }
 }
