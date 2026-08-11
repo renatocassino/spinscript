@@ -91,8 +91,8 @@ Percussão usa a grade de steps. As posições são só os números dos steps
 onde o som toca:
 
 ```
-pattern kick (sound=kick, grid=16) { 9 }
-pattern hats (sound=hihat, grid=16) { 3, 7, 11, 15 }
+pattern @kick (sound=kick, grid=16) { 9 }
+pattern @hats (sound=hihat, grid=16) { 3, 7, 11, 15 }
 ```
 
 O `kick` acima dispara só no step 9. O `hats` dispara nos steps 3, 7, 11
@@ -105,7 +105,7 @@ começa, medidos em batidas. (Essa parte da sintaxe ainda vai ser
 refinada quando entrarmos em notas e acordes de verdade.)
 
 ```
-pattern baixo (sound=bass, free) {
+pattern @baixo (sound=bass, free) {
   // nota  duracao  inicio(em batidas)
   C2       1        0
   G2       1        2
@@ -124,7 +124,7 @@ Um loop agrupa patterns e define a duração em bars. Todo pattern tocado
 dentro dele soa simultaneamente.
 
 ```
-loop groove (bars=1) {
+loop @groove (bars=1) {
   play @kick;
   play @snare;
   play @hats;
