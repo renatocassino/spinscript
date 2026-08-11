@@ -1,4 +1,5 @@
-public enum TokenType {
+public enum TokenType
+{
     SEMICOLON,
     EQUALS,
     NUMBER,

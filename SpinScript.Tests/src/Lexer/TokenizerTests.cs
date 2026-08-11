@@ -1,8 +1,8 @@
+using SpinScript.Lexer;
 using Xunit;
 
-using SpinScript.Lexer;
-
-public class TokenizerTests {
+public class TokenizerTests
+{
     [Fact]
     public void TokenizeSimpleAssignment_ReturnsCorrectTokens()
     {
@@ -23,6 +23,102 @@ public class TokenizerTests {
         Assert.Equal(TokenType.EOF, tokens[4].Type);
         Assert.Equal("", tokens[4].Value);
     }
+
+    [Fact]
+    public void TokenizeLineWithComments()
+    {
+        var tokens = new Lexer("@steps = 30; // This is the steps to code").Tokenize();
+
+        Assert.Equal(TokenType.REFERENCE, tokens[0].Type);
+        Assert.Equal("steps", tokens[0].Value);
+
+        Assert.Equal(TokenType.EQUALS, tokens[1].Type);
+        Assert.Equal("=", tokens[1].Value);
+
+        Assert.Equal(TokenType.NUMBER, tokens[2].Type);
+        Assert.Equal("30", tokens[2].Value);
+
+        Assert.Equal(TokenType.SEMICOLON, tokens[3].Type);
+        Assert.Equal(";", tokens[3].Value);
+
+        Assert.Equal(TokenType.EOF, tokens[4].Type);
+        Assert.Equal("", tokens[4].Value);
+    }
+
+    [Fact]
+    public void TokenizeLinesWithInlineComments()
+    {
+        var tokens = new Lexer("@steps = 30;\n// This is the steps to code\n// Now I'll set another another var\n@bpm = 80;\n\n").Tokenize();
+
+        Assert.Equal(TokenType.REFERENCE, tokens[0].Type);
+        Assert.Equal("steps", tokens[0].Value);
+
+        Assert.Equal(TokenType.EQUALS, tokens[1].Type);
+        Assert.Equal("=", tokens[1].Value);
+
+        Assert.Equal(TokenType.NUMBER, tokens[2].Type);
+        Assert.Equal("30", tokens[2].Value);
+
+        Assert.Equal(TokenType.SEMICOLON, tokens[3].Type);
+        Assert.Equal(";", tokens[3].Value);
+
+        Assert.Equal(TokenType.REFERENCE, tokens[4].Type);
+        Assert.Equal("bpm", tokens[4].Value);
+
+        Assert.Equal(TokenType.EQUALS, tokens[5].Type);
+        Assert.Equal("=", tokens[5].Value);
+
+        Assert.Equal(TokenType.NUMBER, tokens[6].Type);
+        Assert.Equal("80", tokens[6].Value);
+
+        Assert.Equal(TokenType.SEMICOLON, tokens[7].Type);
+        Assert.Equal(";", tokens[7].Value);
+
+        Assert.Equal(TokenType.EOF, tokens[8].Type);
+        Assert.Equal("", tokens[8].Value);
+    }
+
+    [Fact]
+    public void TokenizeMultipleLineComments()
+    {
+        var input = """
+            @bpm = 79;
+            /**
+                This is a multiline comment, really cool
+            */
+            @steps = 5;                                                                                                                                    
+            """;
+
+        var tokens = new Lexer(input).Tokenize();
+
+        Assert.Equal(TokenType.REFERENCE, tokens[0].Type);
+        Assert.Equal("bpm", tokens[0].Value);
+
+        Assert.Equal(TokenType.EQUALS, tokens[1].Type);
+        Assert.Equal("=", tokens[1].Value);
+
+        Assert.Equal(TokenType.NUMBER, tokens[2].Type);
+        Assert.Equal("79", tokens[2].Value);
+
+        Assert.Equal(TokenType.SEMICOLON, tokens[3].Type);
+        Assert.Equal(";", tokens[3].Value);
+
+        Assert.Equal(TokenType.REFERENCE, tokens[4].Type);
+        Assert.Equal("steps", tokens[4].Value);
+
+        Assert.Equal(TokenType.EQUALS, tokens[5].Type);
+        Assert.Equal("=", tokens[5].Value);
+
+        Assert.Equal(TokenType.NUMBER, tokens[6].Type);
+        Assert.Equal("5", tokens[6].Value);
+
+        Assert.Equal(TokenType.SEMICOLON, tokens[7].Type);
+        Assert.Equal(";", tokens[7].Value);
+
+        Assert.Equal(TokenType.EOF, tokens[8].Type);
+        Assert.Equal("", tokens[8].Value);
+    }
+
 
     [Theory]
     [InlineData("@bpm = 129;\n")]

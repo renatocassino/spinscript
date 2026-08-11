@@ -1,47 +1,53 @@
+using System.Globalization;
+
 namespace SpinScript.Lexer;
 
 public class Lexer
 {
-    private readonly string input;
-    private int index = 0;
-    private List<Token> tokens = [];
+    private readonly string _input;
+    private int _index = 0;
+    private List<Token> _tokens = [];
 
     public Lexer(string input)
     {
-        this.input = input;
+        _input = input;
     }
 
     private static readonly Dictionary<string, TokenType> Keywords = new()
     {
-        ["loop"]    = TokenType.LOOP,
-        ["play"]    = TokenType.PLAY,
-        ["song"]    = TokenType.SONG,
-        ["repeat"]  = TokenType.REPEAT,
+        ["loop"] = TokenType.LOOP,
+        ["play"] = TokenType.PLAY,
+        ["song"] = TokenType.SONG,
+        ["repeat"] = TokenType.REPEAT,
     };
 
 
     public List<Token> Tokenize()
     {
-        tokens = [];
-        while (index < input.Length)
+        _tokens = [];
+        while (_index < _input.Length)
         {
-            var currentChar = input[index];
-            if (char.IsWhiteSpace(currentChar)) {
-                index++;
+            var currentChar = _input[_index];
+            if (char.IsWhiteSpace(currentChar))
+            {
+                _index++;
                 continue;
             }
 
-            if (char.IsDigit(currentChar)) {
+            if (char.IsDigit(currentChar))
+            {
                 AddNumberToken();
                 continue;
             }
 
-            if (char.IsLetter(currentChar)) {
+            if (char.IsLetter(currentChar))
+            {
                 AddReservedWord();
                 continue;
             }
 
-            switch (currentChar) {
+            switch (currentChar)
+            {
                 case '@': AddVariableReferenceToken(); break;
                 case '=': AddToken(TokenType.EQUALS, currentChar.ToString()); break;
                 case ';': AddToken(TokenType.SEMICOLON, currentChar.ToString()); break;
@@ -49,81 +55,123 @@ public class Lexer
                 case '}': AddToken(TokenType.RBRACE, currentChar.ToString()); break;
                 case '(': AddToken(TokenType.LPAREN, currentChar.ToString()); break;
                 case ')': AddToken(TokenType.RPAREN, currentChar.ToString()); break;
+                case '/': IgnoreCommentInline(); break;
                 default:
-                    throw new LexerException($"Unexpected character '{currentChar}' at index {index}");
+                    throw new LexerException($"Unexpected character '{currentChar}' at index {_index}");
                     break;
             }
         }
 
-        tokens.Add(new Token(TokenType.EOF, ""));
+        _tokens.Add(new Token(TokenType.EOF, ""));
 
-        return tokens;
+        return _tokens;
     }
 
-    private void AddToken(TokenType t, string v) {
-        tokens.Add(new Token(t, v));
-        index++;
+    private void IgnoreCommentInline()
+    {
+        _index++;
+
+        if (_index >= _input.Length || (_input[_index] != '/' && _input[_index] != '*'))
+        {
+            throw new LexerException($"Comments must have two slices '//' to inline comments or '/*' for multiline comments. Received '{_input[_index]}'");
+        }
+
+        if (_input[_index] == '*')
+        {
+            _index++;
+
+            while (_index < _input.Length - 1)
+            {
+                if (_input[_index] == '*' && _input[_index + 1] == '/')
+                {
+                    _index += 2;
+                    return;
+                }
+
+                _index++;
+            }
+
+            return;
+        }
+
+        _index++;
+
+        while (_index < _input.Length && _input[_index] != '\n')
+        {
+            _index++;
+        }
+    }
+
+    private void AddToken(TokenType t, string v)
+    {
+        _tokens.Add(new Token(t, v));
+        _index++;
     }
 
     private void AddReservedWord()
     {
-        int start = index;
-        index++;
-        while (index < input.Length &&
-            (char.IsLetterOrDigit(input[index]) || input[index] == '_'))
+        int start = _index;
+        _index++;
+        while (_index < _input.Length &&
+            (char.IsLetterOrDigit(_input[_index]) || _input[_index] == '_'))
         {
-            index++;
+            _index++;
         }
 
-        var word = input[start..index];
+        var word = _input[start.._index];
 
-        if (Keywords.TryGetValue(word, out var keywordType)) {
-            tokens.Add(new Token(keywordType, word));
+        if (Keywords.TryGetValue(word, out var keywordType))
+        {
+            _tokens.Add(new Token(keywordType, word));
             return;
         }
 
-        tokens.Add(new Token(TokenType.IDENT, word));
+        _tokens.Add(new Token(TokenType.IDENT, word));
     }
 
     private void AddNumberToken()
     {
         var number = "";
-        for (int i = index; i < input.Length; i++)
+        for (int i = _index; i < _input.Length; i++)
         {
-            if (int.TryParse(input[i].ToString(), out int currentResult)) {
-                number += currentResult.ToString();
+            if (int.TryParse(_input[i].ToString(), out int currentResult))
+            {
+                number += currentResult.ToString(CultureInfo.InvariantCulture);
                 continue;
             }
             break;
         }
 
-        if (int.TryParse(number, out int result)) {
-            tokens.Add(new Token(TokenType.NUMBER, result.ToString()));
-        } else {
-            throw new Exception("Invalid convertion to integer");
+        if (int.TryParse(number, out var result))
+        {
+            _tokens.Add(new Token(TokenType.NUMBER, result.ToString(CultureInfo.InvariantCulture)));
         }
-        index += number.Length;
+        else
+        {
+            throw new LexerException("Invalid convertion to integer");
+        }
+        _index += number.Length;
     }
 
     private void AddVariableReferenceToken()
     {
-        index++;
+        _index++;
 
-        if (index >= input.Length || !char.IsLetter(input[index]))
+        if (_index >= _input.Length || !char.IsLetter(_input[_index]))
         {
             throw new LexerException(
-                $"A reference name must start with a letter at index {index}.");
+                $"A reference name must start with a letter at index {_index}.");
         }
 
-        int start = index;
-        while (index < input.Length &&
-            (char.IsLetterOrDigit(input[index]) || input[index] == '_'))
+        int start = _index;
+        while (_index < _input.Length &&
+            (char.IsLetterOrDigit(_input[_index]) || _input[_index] == '_'))
         {
-            index++;
+            _index++;
         }
 
-        var reference = input[start..index];
-        tokens.Add(new Token(TokenType.REFERENCE, reference));
+        var reference = _input[start.._index];
+        _tokens.Add(new Token(TokenType.REFERENCE, reference));
 
     }
 }
