@@ -19,6 +19,7 @@ public class Lexer
         ["play"] = TokenType.PLAY,
         ["song"] = TokenType.SONG,
         ["repeat"] = TokenType.REPEAT,
+        ["pattern"] = TokenType.PATTERN,
     };
 
 
@@ -56,6 +57,7 @@ public class Lexer
                 case '(': AddToken(TokenType.LPAREN, currentChar.ToString()); break;
                 case ')': AddToken(TokenType.RPAREN, currentChar.ToString()); break;
                 case '/': IgnoreCommentInline(); break;
+                case ',': AddToken(TokenType.COMMA, currentChar.ToString()); break;
                 default:
                     throw new LexerException($"Unexpected character '{currentChar}' at index {_index}");
                     break;

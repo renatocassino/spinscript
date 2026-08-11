@@ -44,7 +44,7 @@ public class Parser
         }
     }
 
-    public Ast.AssignmentNode ParseReference()
+    public AssignmentNode ParseReference()
     {
         var currentToken = Consume(TokenType.REFERENCE);
 
