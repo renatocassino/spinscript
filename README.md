@@ -206,9 +206,9 @@ contratempos.
 ```
 @bpm = 75;
 
-pattern kick  (sound=kick,  grid=16) { 9 }
-pattern snare (sound=snare, grid=16) { 9 }
-pattern hats  (sound=hihat, grid=16) { 3, 7, 11, 15 }
+pattern @kick  (sound=kick,  grid=16) { 9 }
+pattern @snare (sound=snare, grid=16) { 9 }
+pattern @hats  (sound=hihat, grid=16) { 3, 7, 11, 15 }
 
 loop groove (bars=1) {
   play @kick;

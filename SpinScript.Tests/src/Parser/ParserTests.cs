@@ -31,4 +31,22 @@ public class ParserTests
         Assert.Equal("volume", assignment3.Name);
         Assert.Equal("120", assignment3.Value);
     }
+
+    [Fact]
+    public void ParsePatternReturnNode()
+    {
+        var program = new Parser("pattern @kick (grid=16) { 9 };\npattern @hats (grid=16) { 3, 7, 11, 15 };").Parse();
+
+        var pattern = Assert.IsType<PatternNode>(program.Statements[0]);
+
+        Assert.Equal("kick", pattern.Name);
+        Assert.Equal("16", pattern.Parameters["grid"]);
+        Assert.Equal(["9"], pattern.Steps);
+
+        var pattern2 = Assert.IsType<PatternNode>(program.Statements[1]);
+
+        Assert.Equal("hats", pattern2.Name);
+        Assert.Equal("16", pattern2.Parameters["grid"]);
+        Assert.Equal(["3", "7", "11", "15"], pattern2.Steps);
+    }
 }
