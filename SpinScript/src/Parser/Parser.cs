@@ -28,7 +28,7 @@ public class Parser
                 case TokenType.PATTERN: statements.Add(ParsePattern()); break;
                 case TokenType.EOF: ParseEOF(); break;
                 default:
-                    throw new ParserException($"Cannot parse token '{token.Type}' with value '{token.Value}'");
+                    throw new ParserException($"Cannot parse token '{token.Type}' with value '{token.Value}'", token.Line, token.Column);
             }
         }
 
@@ -41,7 +41,7 @@ public class Parser
         index++;
         if (index < tokens.Count)
         {
-            throw new ParserException($"Cannot read more tokens after EOF. Found more '{tokens.Count}' tokens.");
+            throw new ParserException($"Cannot read more tokens after EOF. Found more '{tokens.Count}' tokens.", tokens[index].Line, tokens[index].Column);
         }
     }
 
@@ -58,7 +58,7 @@ public class Parser
         Consume(TokenType.RBRACE);
         Consume(TokenType.SEMICOLON);
 
-        return new PatternNode(patternName.Value, parameters, steps);
+        return new PatternNode(patternName.Value, parameters, steps, patternName.Line, patternName.Column);
     }
 
     private List<string> ParseSteps()
@@ -89,7 +89,7 @@ public class Parser
         var value = Consume(TokenType.NUMBER);
         Consume(TokenType.SEMICOLON);
 
-        return new AssignmentNode(varName, value.Value);
+        return new AssignmentNode(varName, value.Value, currentToken.Line, currentToken.Column);
     }
 
     // Parênteses são opcionais; se existirem, os parâmetros dentro
@@ -125,7 +125,7 @@ public class Parser
 
         if (!parameters.TryAdd(paramName.Value, value.Value))
         {
-            throw new ParserException($"Parameter '{paramName.Value}' was already set.");
+            throw new ParserException($"Parameter '{paramName.Value}' was already set.", paramName.Line, paramName.Column);
         }
     }
 
@@ -135,7 +135,7 @@ public class Parser
 
         if (expected != currentToken.Type)
         {
-            throw new ParserException($"Expected token '{expected}' but received token '{currentToken}'.");
+            throw new ParserException($"Expected token '{expected}' but received token '{currentToken}'.", currentToken.Line, currentToken.Column);
         }
 
         index++;
