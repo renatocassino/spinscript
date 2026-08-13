@@ -26,6 +26,7 @@ public class Parser
             {
                 case TokenType.REFERENCE: statements.Add(ParseReference()); break;
                 case TokenType.PATTERN: statements.Add(ParsePattern()); break;
+                case TokenType.LOOP: statements.Add(ParseLoop()); break;
                 case TokenType.EOF: ParseEOF(); break;
                 default:
                     throw new ParserException($"Cannot parse token '{token.Type}' with value '{token.Value}'", token.Line, token.Column);
@@ -59,6 +60,34 @@ public class Parser
         Consume(TokenType.SEMICOLON);
 
         return new PatternNode(patternName.Value, parameters, steps, patternName.Line, patternName.Column);
+    }
+
+    public LoopNode ParseLoop()
+    {
+        var loopToken = Consume(TokenType.LOOP);
+        var loopCountToken = Consume(TokenType.REFERENCE);
+
+        Consume(TokenType.LBRACE);
+
+        var statements = new List<AstNode>();
+
+        while (!Check(TokenType.RBRACE))
+        {
+            var token = _tokens[_index];
+
+            switch (token.Type)
+            {
+                case TokenType.LOOP: statements.Add(ParseLoop()); break;
+                case TokenType.REFERENCE: statements.Add(ParseReference()); break;
+                case TokenType.PATTERN: statements.Add(ParsePattern()); break;
+                default:
+                    throw new ParserException($"Cannot parse token '{token.Type}' with value '{token.Value}' inside loop.", token.Line, token.Column);
+            }
+        }
+
+        Consume(TokenType.RBRACE);
+
+        return new LoopNode(loopCountToken.Value, statements, loopToken.Line, loopToken.Column);
     }
 
     private List<string> ParseSteps()

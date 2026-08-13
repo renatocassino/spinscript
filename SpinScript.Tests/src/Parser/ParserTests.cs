@@ -33,6 +33,58 @@ public class ParserTests
     }
 
     [Fact]
+    public void ParseLoopRecursive()
+    {
+        var program = new Parser("""
+loop @intro {
+    loop @firstPhase {
+        loop @instrumental {
+            @introMidi = "/intro.mid";
+        }
+    }
+}
+""").Parse();
+
+        var loop = Assert.IsType<LoopNode>(program.Statements[0]);
+        Assert.Equal("intro", loop.Name);
+        Assert.Single(loop.Statements);
+
+        var firstPhaseLoop = Assert.IsType<LoopNode>(loop.Statements[0]);
+        Assert.Equal("firstPhase", firstPhaseLoop.Name);
+        Assert.Single(firstPhaseLoop.Statements);
+
+        var instrumentalLoop = Assert.IsType<LoopNode>(firstPhaseLoop.Statements[0]);
+        Assert.Equal("instrumental", instrumentalLoop.Name);
+
+        var playStatement = Assert.IsType<AssignmentNode>(instrumentalLoop.Statements[0]);
+        Assert.Equal("introMidi", playStatement.Name);
+        Assert.Equal("/intro.mid", playStatement.Value);
+    }
+
+    [Theory]
+    [InlineData("loop @iterations {}", "iterations", 0)]
+    [InlineData("loop @iterations { @bpm = 120; }", "iterations", 1)]
+    [InlineData("loop @iterations { pattern @kick (grid=16) { 9 }; }", "iterations", 1)]
+    [InlineData("loop @iterations { @bpm = 120; pattern @kick (grid=16) { 9 }; }", "iterations", 2)]
+    public void ParseLoopReturnsLoopNodeWithExpectedStatements(string input, string expectedName, int expectedStatementCount)
+    {
+        var program = new Parser(input).Parse();
+
+        var loop = Assert.IsType<LoopNode>(program.Statements[0]);
+        Assert.Equal(expectedName, loop.Name);
+        Assert.Equal(expectedStatementCount, loop.Statements.Count);
+    }
+
+    [Theory]
+    [InlineData("loop @iterations { 9; }")]
+    [InlineData("loop @iterations {")]
+    [InlineData("loop { }")]
+    public void ParseLoopWithInvalidBodyThrows(string input)
+    {
+        Assert.Throws<ParserException>(() => new Parser(input).Parse());
+    }
+
+   [Fact]
     public void ParsePatternReturnNode()
     {
         var program = new Parser("pattern @kick (grid=16) { 9 };\npattern @hats (grid=16) { 3, 7, 11, 15 };").Parse();

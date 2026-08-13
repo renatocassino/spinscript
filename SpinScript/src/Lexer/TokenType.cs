@@ -1,3 +1,5 @@
+namespace SpinScript.Lexer;
+
 public enum TokenType
 {
     STRING,
