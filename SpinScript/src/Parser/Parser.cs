@@ -5,22 +5,22 @@ using SpinScript.Lexer;
 
 public class Parser
 {
-    public int index;
-    private readonly List<Token> tokens = [];
+    private int _index;
+    private readonly List<Token> _tokens = [];
 
     public Parser(string input)
     {
-        tokens = new Lexer(input).Tokenize();
-        index = 0;
+        _tokens = new Lexer(input).Tokenize();
+        _index = 0;
     }
 
     public ProgramNode Parse()
     {
         var statements = new List<AstNode>();
 
-        while (index < tokens.Count)
+        while (_index < _tokens.Count)
         {
-            var token = tokens[index];
+            var token = _tokens[_index];
 
             switch (token.Type)
             {
@@ -38,10 +38,10 @@ public class Parser
     public void ParseEOF()
     {
         Consume(TokenType.EOF);
-        index++;
-        if (index < tokens.Count)
+        _index++;
+        if (_index < _tokens.Count)
         {
-            throw new ParserException($"Cannot read more tokens after EOF. Found more '{tokens.Count}' tokens.", tokens[index].Line, tokens[index].Column);
+            throw new ParserException($"Cannot read more tokens after EOF. Found more '{_tokens.Count}' tokens.", _tokens[_index].Line, _tokens[_index].Column);
         }
     }
 
@@ -131,22 +131,22 @@ public class Parser
 
     public Token Consume(TokenType expected)
     {
-        var currentToken = tokens[index];
+        var currentToken = _tokens[_index];
 
         if (expected != currentToken.Type)
         {
             throw new ParserException($"Expected token '{expected}' but received token '{currentToken}'.", currentToken.Line, currentToken.Column);
         }
 
-        index++;
+        _index++;
         return currentToken;
     }
 
     // Olha o próximo token sem consumir - é o que permite decidir
     // qual caminho seguir (=, (, {, ;) antes de comprometer o índice.
-    private Token Peek() => tokens[index];
+    private Token Peek() => _tokens[_index];
 
-    private bool Check(TokenType type) => index < tokens.Count && Peek().Type == type;
+    private bool Check(TokenType type) => _index < _tokens.Count && Peek().Type == type;
 
     private bool Match(TokenType type)
     {
@@ -155,7 +155,7 @@ public class Parser
             return false;
         }
 
-        index++;
+        _index++;
         return true;
     }
 }

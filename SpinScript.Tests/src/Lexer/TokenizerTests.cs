@@ -46,6 +46,97 @@ public class TokenizerTests
     }
 
     [Fact]
+    public void TokenizeSimpleVarWithSingleQuoteString()
+    {
+        var tokens = new Lexer("@guitarMidi='/guitar.midi';").Tokenize();
+
+        Assert.Equal(TokenType.REFERENCE, tokens[0].Type);
+        Assert.Equal("guitarMidi", tokens[0].Value);
+
+        Assert.Equal(TokenType.EQUALS, tokens[1].Type);
+        Assert.Equal("=", tokens[1].Value);
+
+        Assert.Equal(TokenType.STRING, tokens[2].Type);
+        Assert.Equal("/guitar.midi", tokens[2].Value);
+
+        Assert.Equal(TokenType.SEMICOLON, tokens[3].Type);
+        Assert.Equal(";", tokens[3].Value);
+
+        Assert.Equal(TokenType.EOF, tokens[4].Type);
+        Assert.Equal("", tokens[4].Value);
+    }
+
+    [Fact]
+    public void TokenizeSimpleVarWithDoubleQuoteString()
+    {
+        var tokens = new Lexer("@guitarMidi = \"/guitar.midi\";").Tokenize();
+
+        Assert.Equal(TokenType.REFERENCE, tokens[0].Type);
+        Assert.Equal("guitarMidi", tokens[0].Value);
+
+        Assert.Equal(TokenType.EQUALS, tokens[1].Type);
+        Assert.Equal("=", tokens[1].Value);
+
+        Assert.Equal(TokenType.STRING, tokens[2].Type);
+        Assert.Equal("/guitar.midi", tokens[2].Value);
+
+        Assert.Equal(TokenType.SEMICOLON, tokens[3].Type);
+        Assert.Equal(";", tokens[3].Value);
+
+        Assert.Equal(TokenType.EOF, tokens[4].Type);
+        Assert.Equal("", tokens[4].Value);
+    }
+
+    [Theory]
+    [InlineData("@x = \"\";")]
+    [InlineData("@x = '';")]
+    public void TokenizeEmptyStringReturnsEmptyValue(string input)
+    {
+        var tokens = new Lexer(input).Tokenize();
+
+        Assert.Equal(TokenType.STRING, tokens[2].Type);
+        Assert.Equal("", tokens[2].Value);
+    }
+
+    [Fact]
+    public void TokenizeDoubleQuoteStringAllowsSingleQuoteInside()
+    {
+        var tokens = new Lexer("@x = \"it's fine\";").Tokenize();
+
+        Assert.Equal(TokenType.STRING, tokens[2].Type);
+        Assert.Equal("it's fine", tokens[2].Value);
+    }
+
+    [Fact]
+    public void TokenizeSingleQuoteStringAllowsDoubleQuoteInside()
+    {
+        var tokens = new Lexer("@x = 'She said \"hi\"';").Tokenize();
+
+        Assert.Equal(TokenType.STRING, tokens[2].Type);
+        Assert.Equal("She said \"hi\"", tokens[2].Value);
+    }
+
+    [Fact]
+    public void TokenizeStringTracksStartPosition()
+    {
+        var tokens = new Lexer("@guitarMidi = \"/guitar.midi\";").Tokenize();
+
+        Assert.Equal(0, tokens[2].Line);
+        Assert.Equal(14, tokens[2].Column); // aponta pra aspa de abertura
+    }
+
+    [Theory]
+    [InlineData("@x = \"unterminated")]
+    [InlineData("@x = 'unterminated")]
+    public void TokenizeUnterminatedStringThrows(string input)
+    {
+        var ex = Assert.Throws<LexerException>(() => new Lexer(input).Tokenize());
+
+        Assert.Equal(0, ex.Line);
+        Assert.Equal(5, ex.Column); // aponta pra aspa de abertura
+    }
+
+    [Fact]
     public void TokenizePlaySong()
     {
         var tokens = new Lexer("play @intro; play @chord (repeat=2);").Tokenize();

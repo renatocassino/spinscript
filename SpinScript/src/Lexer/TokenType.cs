@@ -1,5 +1,6 @@
 public enum TokenType
 {
+    STRING,
     SEMICOLON,
     EQUALS,
     NUMBER,

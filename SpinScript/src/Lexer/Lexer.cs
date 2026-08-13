@@ -5,10 +5,10 @@ namespace SpinScript.Lexer;
 public class Lexer
 {
     private readonly string _input;
-    private int _index = 0;
+    private int _index;
     private List<Token> _tokens = [];
-    private int _line = 0;
-    private int _column = 0;
+    private int _line;
+    private int _column;
 
     public Lexer(string input)
     {
@@ -27,6 +27,7 @@ public class Lexer
 
     public List<Token> Tokenize()
     {
+        _index = 0;
         _tokens = [];
         _line = 0;
         _column = 0;
@@ -59,6 +60,8 @@ public class Lexer
             switch (currentChar)
             {
                 case '@': AddVariableReferenceToken(); break;
+                case '"':
+                case '\'': AddStringToken(); break;
                 case '=': AddToken(TokenType.EQUALS, currentChar.ToString()); break;
                 case ';': AddToken(TokenType.SEMICOLON, currentChar.ToString()); break;
                 case '{': AddToken(TokenType.LBRACE, currentChar.ToString()); break;
@@ -202,6 +205,34 @@ public class Lexer
 
         _index += number.Length;
         _column += number.Length;
+    }
+    
+    private void AddStringToken()
+    {
+        int startLine = _line;
+        int startColumn = _column;
+        char quoteChar = _input[_index];
+        _index++;
+        _column++;
+
+        var strValue = "";
+        while (_index < _input.Length && _input[_index] != quoteChar)
+        {
+            strValue += _input[_index];
+            _index++;
+            _column++;
+        }
+
+        if (_index >= _input.Length)
+        {
+            throw new LexerException("Unterminated string literal", startLine, startColumn);
+        }
+
+        // Consume the closing quote
+        _index++;
+        _column++;
+
+        _tokens.Add(new Token(TokenType.STRING, strValue, startLine, startColumn));
     }
 
     private void AddVariableReferenceToken()
