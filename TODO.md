@@ -5,7 +5,7 @@ Baseado no README atual vs. o que já existe em `SpinScript/src/Lexer` e
 
 ## Lexer / Tokenizer
 
-- [ ] **Números decimais.** `swing=0.2` (seção "Loops", modificador do
+- [x] **Números decimais.** `swing=0.2` (seção "Loops", modificador do
       `play`) não tokeniza — `AddNumberToken` só lê dígitos; o `.` cai no
       `default` do switch e lança `LexerException`. Precisa suportar
       ponto decimal (e decidir se `NUMBER` vira um único tipo com valor

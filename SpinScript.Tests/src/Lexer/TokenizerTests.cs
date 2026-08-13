@@ -25,6 +25,27 @@ public class TokenizerTests
     }
 
     [Fact]
+    public void TokenizeSimpleVarWithDoubleNumber()
+    {
+        var tokens = new Lexer("@volume = 0.1;").Tokenize();
+
+        Assert.Equal(TokenType.REFERENCE, tokens[0].Type);
+        Assert.Equal("volume", tokens[0].Value);
+
+        Assert.Equal(TokenType.EQUALS, tokens[1].Type);
+        Assert.Equal("=", tokens[1].Value);
+
+        Assert.Equal(TokenType.NUMBER, tokens[2].Type);
+        Assert.Equal("0.1", tokens[2].Value);
+
+        Assert.Equal(TokenType.SEMICOLON, tokens[3].Type);
+        Assert.Equal(";", tokens[3].Value);
+
+        Assert.Equal(TokenType.EOF, tokens[4].Type);
+        Assert.Equal("", tokens[4].Value);
+    }
+
+    [Fact]
     public void TokenizePlaySong()
     {
         var tokens = new Lexer("play @intro; play @chord (repeat=2);").Tokenize();
@@ -329,6 +350,85 @@ public class TokenizerTests
         Assert.Equal("", tokens[8].Value);
     }
 
+    [Fact]
+    public void TokenizeTracksLineAndColumnAcrossMultipleLines()
+    {
+        var input = "@bpm = 120;\nloop {\n  play;\n}";
+        var tokens = new Lexer(input).Tokenize();
+
+        Assert.Equal(0, tokens[0].Line);   // bpm (REFERENCE, aponta pro '@')
+        Assert.Equal(0, tokens[0].Column);
+
+        Assert.Equal(0, tokens[2].Line);   // 120 (NUMBER)
+        Assert.Equal(7, tokens[2].Column);
+
+        Assert.Equal(1, tokens[4].Line);   // loop (LOOP), segunda linha
+        Assert.Equal(0, tokens[4].Column);
+
+        Assert.Equal(2, tokens[6].Line);   // play (PLAY), terceira linha, indentado
+        Assert.Equal(2, tokens[6].Column);
+
+        Assert.Equal(3, tokens[8].Line);   // '}' na última linha
+        Assert.Equal(0, tokens[8].Column);
+    }
+
+    [Fact]
+    public void TokenizeTracksLineAndColumnAfterMultilineComment()
+    {
+        var input = "@bpm = 79;\n/**\n    multiline comment\n*/\n@steps = 5;";
+        var tokens = new Lexer(input).Tokenize();
+
+        // Depois do comentário de 4 linhas (linhas 1 a 3), @steps deve estar na linha 4.
+        Assert.Equal(TokenType.REFERENCE, tokens[4].Type);
+        Assert.Equal("steps", tokens[4].Value);
+        Assert.Equal(4, tokens[4].Line);
+        Assert.Equal(0, tokens[4].Column);
+    }
+
+    [Fact]
+    public void TokenizeUnexpectedCharacterThrowsWithLineAndColumn()
+    {
+        var ex = Assert.Throws<LexerException>(() => new Lexer("loop\n#").Tokenize());
+
+        Assert.Equal(1, ex.Line);
+        Assert.Equal(0, ex.Column);
+    }
+
+    [Fact]
+    public void TokenizeInvalidCommentSliceThrowsWithLineAndColumn()
+    {
+        var ex = Assert.Throws<LexerException>(() => new Lexer("loop\n/x").Tokenize());
+
+        Assert.Equal(1, ex.Line);
+        Assert.Equal(1, ex.Column);
+    }
+
+    [Fact]
+    public void TokenizeCommentReachingEndOfInputThrowsWithLineAndColumn()
+    {
+        var ex = Assert.Throws<LexerException>(() => new Lexer("/").Tokenize());
+
+        Assert.Equal(0, ex.Line);
+        Assert.Equal(1, ex.Column);
+    }
+
+    [Fact]
+    public void TokenizeNumberWithDoubleDotThrowsWithLineAndColumn()
+    {
+        var ex = Assert.Throws<LexerException>(() => new Lexer("12.3.4;").Tokenize());
+
+        Assert.Equal(0, ex.Line);
+        Assert.Equal(0, ex.Column);
+    }
+
+    [Fact]
+    public void TokenizeReferenceInvalidStartThrowsWithLineAndColumn()
+    {
+        var ex = Assert.Throws<LexerException>(() => new Lexer("@2fast = 1;").Tokenize());
+
+        Assert.Equal(0, ex.Line);
+        Assert.Equal(1, ex.Column);
+    }
 
     [Theory]
     [InlineData("@bpm = 129;\n")]
