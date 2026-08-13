@@ -504,6 +504,15 @@ public class TokenizerTests
     }
 
     [Fact]
+    public void TokenizeUnterminatedMultilineCommentThrowsWithLineAndColumn()
+    {
+        var ex = Assert.Throws<LexerException>(() => new Lexer("@bpm = 120;\n/* nunca fecha").Tokenize());
+
+        Assert.Equal(1, ex.Line);   // aponta pro '/' que abriu o comentário
+        Assert.Equal(0, ex.Column);
+    }
+
+    [Fact]
     public void TokenizeNumberWithDoubleDotThrowsWithLineAndColumn()
     {
         var ex = Assert.Throws<LexerException>(() => new Lexer("12.3.4;").Tokenize());

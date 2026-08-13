@@ -68,7 +68,7 @@ public class Lexer
                 case '}': AddToken(TokenType.RBRACE, currentChar.ToString()); break;
                 case '(': AddToken(TokenType.LPAREN, currentChar.ToString()); break;
                 case ')': AddToken(TokenType.RPAREN, currentChar.ToString()); break;
-                case '/': IgnoreCommentInline(); break;
+                case '/': SkipComment(); break;
                 case ',': AddToken(TokenType.COMMA, currentChar.ToString()); break;
                 default:
                     throw new LexerException($"Unexpected character '{currentChar}'", _line, _column);
@@ -80,8 +80,11 @@ public class Lexer
         return _tokens;
     }
 
-    private void IgnoreCommentInline()
+    private void SkipComment()
     {
+        int startLine = _line;
+        int startColumn = _column;
+
         _index++;
         _column++;
 
@@ -125,7 +128,9 @@ public class Lexer
                 _index++;
             }
 
-            return;
+            throw new LexerException(
+                "Unterminated multiline comment. Expected closing '*/'.",
+                startLine, startColumn);
         }
 
         _index++;
@@ -206,7 +211,7 @@ public class Lexer
         _index += number.Length;
         _column += number.Length;
     }
-    
+
     private void AddStringToken()
     {
         int startLine = _line;

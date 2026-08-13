@@ -86,7 +86,20 @@ public class Parser
 
         var varName = currentToken.Value;
         Consume(TokenType.EQUALS);
-        var value = Consume(TokenType.NUMBER);
+
+        Token value;
+        if (Check(TokenType.NUMBER))
+        {
+            value = Consume(TokenType.NUMBER);
+        } else if (Check(TokenType.STRING))
+        {
+            value = Consume(TokenType.STRING);
+        }
+        else
+        {
+            throw new ParserException($"Expected a number or string after '=' but received token '{Peek()}'.", currentToken.Line, currentToken.Column);
+        }
+        
         Consume(TokenType.SEMICOLON);
 
         return new AssignmentNode(varName, value.Value, currentToken.Line, currentToken.Column);
