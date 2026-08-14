@@ -1,0 +1,138 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "SpinScript",
+  "scopeName": "source.spin",
+  "fileTypes": ["spin"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#keywords" },
+    { "include": "#variables" },
+    { "include": "#parameters" },
+    { "include": "#punctuation" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.spin",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.spin",
+          "begin": "/\\*",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.comment.begin.spin" }
+          },
+          "end": "\\*/",
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.comment.end.spin" }
+          }
+        }
+      ]
+    },
+
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.spin",
+          "begin": "\"",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.string.begin.spin" }
+          },
+          "end": "\"",
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.string.end.spin" }
+          }
+        },
+        {
+          "name": "string.quoted.single.spin",
+          "begin": "'",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.string.begin.spin" }
+          },
+          "end": "'",
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.string.end.spin" }
+          }
+        }
+      ]
+    },
+
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.spin",
+          "match": "\\b[0-9]+(\\.[0-9]+)?\\b"
+        }
+      ]
+    },
+
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.spin",
+          "match": "\\b(song|loop|pattern|play)\\b"
+        }
+      ]
+    },
+
+    "variables": {
+      "comment": "@name references, inspired by LESS variables: used both where a name is declared (pattern @kick, loop @intro, @bpm = ...) and where it is referenced (play @kick;). The 'name' below scopes the whole @name match (including the sigil) as variable.other.readwrite, same trick the bundled LESS grammar uses, so the '@' picks up the variable color instead of staying in the default foreground.",
+      "patterns": [
+        {
+          "match": "(@)([A-Za-z][A-Za-z0-9_]*)",
+          "name": "variable.other.readwrite.spin",
+          "captures": {
+            "1": { "name": "punctuation.definition.variable.spin" },
+            "2": { "name": "variable.other.readwrite.spin" }
+          }
+        }
+      ]
+    },
+
+    "parameters": {
+      "comment": "Named parameters inside ( ), e.g. grid=16, bars=4, repeat=2, swing=0.2 - any identifier immediately followed by '=' inside a parameter/modifier list.",
+      "patterns": [
+        {
+          "name": "variable.parameter.spin",
+          "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=\\s*=)"
+        }
+      ]
+    },
+
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "keyword.operator.assignment.spin",
+          "match": "="
+        },
+        {
+          "name": "punctuation.terminator.statement.spin",
+          "match": ";"
+        },
+        {
+          "name": "punctuation.separator.comma.spin",
+          "match": ","
+        },
+        {
+          "name": "punctuation.section.parens.begin.spin",
+          "match": "\\("
+        },
+        {
+          "name": "punctuation.section.parens.end.spin",
+          "match": "\\)"
+        },
+        {
+          "name": "punctuation.section.braces.begin.spin",
+          "match": "\\{"
+        },
+        {
+          "name": "punctuation.section.braces.end.spin",
+          "match": "\\}"
+        }
+      ]
+    }
+  }
+}

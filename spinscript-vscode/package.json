@@ -1,0 +1,53 @@
+{
+  "name": "spinscript-vscode",
+  "displayName": "SpinScript",
+  "description": "VS Code language support for SpinScript (.spin files).",
+  "version": "0.0.1",
+  "publisher": "spinscript",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "spin",
+        "aliases": ["SpinScript", "spin"],
+        "extensions": [".spin"],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icon.png",
+          "dark": "./icon.png"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "spin",
+        "scopeName": "source.spin",
+        "path": "./syntaxes/spinscript.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "spinscript.helloWorld",
+        "title": "SpinScript: Hello World"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "build:package": "vsce package",
+    "install:package": "code --install-extension spinscript-vscode-0.0.1.vsix"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.5.0"
+  }
+}
