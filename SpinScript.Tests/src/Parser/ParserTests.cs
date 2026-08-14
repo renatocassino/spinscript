@@ -61,6 +61,21 @@ loop @intro {
         Assert.Equal("/intro.mid", playStatement.Value);
     }
 
+    [Fact]
+    public void ParsePlay()
+    {
+        var program = new Parser("""
+play @song1 (bpm=120, volume=80); 
+""").Parse();
+
+        var play = Assert.IsType<PlayNode>(program.Statements[0]);
+        Assert.Equal("song1", play.PatternName);
+
+        var parameter = play.Parameters;
+        Assert.Equal("120", parameter["bpm"]);
+        Assert.Equal("80", parameter["volume"]);
+    }
+
     [Theory]
     [InlineData("loop @iterations {}", "iterations", 0)]
     [InlineData("loop @iterations { @bpm = 120; }", "iterations", 1)]
