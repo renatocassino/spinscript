@@ -19,5 +19,6 @@ loop @intro {
 }
 
 song (bpm=120, volume=80) {
+    @abuble = 33;
     play @intro;
 }

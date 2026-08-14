@@ -691,6 +691,99 @@ public class TokenizerTests
         Assert.Throws<LexerException>(() => new Lexer("#").Tokenize());
     }
 
+    [Theory]
+    [InlineData("true")]
+    [InlineData("false")]
+    public void TokenizeBooleanKeywordsReturnsBooleanToken(string word)
+    {
+        var tokens = new Lexer(word).Tokenize();
+
+        Assert.Equal(TokenType.BOOLEAN, tokens[0].Type);
+        Assert.Equal(word, tokens[0].Value);
+        Assert.Equal(TokenType.EOF, tokens[1].Type);
+    }
+
+    [Fact]
+    public void TokenizeBooleanAssignment()
+    {
+        var tokens = new Lexer("@muted = true;").Tokenize();
+
+        Assert.Equal(TokenType.REFERENCE, tokens[0].Type);
+        Assert.Equal("muted", tokens[0].Value);
+
+        Assert.Equal(TokenType.EQUALS, tokens[1].Type);
+        Assert.Equal("=", tokens[1].Value);
+
+        Assert.Equal(TokenType.BOOLEAN, tokens[2].Type);
+        Assert.Equal("true", tokens[2].Value);
+
+        Assert.Equal(TokenType.SEMICOLON, tokens[3].Type);
+        Assert.Equal(";", tokens[3].Value);
+
+        Assert.Equal(TokenType.EOF, tokens[4].Type);
+        Assert.Equal("", tokens[4].Value);
+    }
+
+    [Theory]
+    [InlineData("truee")]
+    [InlineData("falsey")]
+    [InlineData("TRUE")]
+    [InlineData("False")]
+    public void TokenizeWordsSimilarToBooleanReturnsIdent(string word)
+    {
+        var tokens = new Lexer(word).Tokenize();
+
+        Assert.Equal(TokenType.IDENT, tokens[0].Type);
+        Assert.Equal(word, tokens[0].Value);
+        Assert.Equal(TokenType.EOF, tokens[1].Type);
+    }
+
+    [Fact]
+    public void TokenizeBooleanInsidePatternParameter()
+    {
+        var tokens = new Lexer("pattern @kick (muted=true) { 9 };").Tokenize();
+
+        Assert.Equal(TokenType.PATTERN, tokens[0].Type);
+        Assert.Equal(TokenType.REFERENCE, tokens[1].Type);
+        Assert.Equal(TokenType.LPAREN, tokens[2].Type);
+        Assert.Equal(TokenType.IDENT, tokens[3].Type);
+        Assert.Equal("muted", tokens[3].Value);
+        Assert.Equal(TokenType.EQUALS, tokens[4].Type);
+
+        Assert.Equal(TokenType.BOOLEAN, tokens[5].Type);
+        Assert.Equal("true", tokens[5].Value);
+
+        Assert.Equal(TokenType.RPAREN, tokens[6].Type);
+    }
+
+    [Fact]
+    public void TokenizeParamWithoutValueReturnsIdentWithoutEqualsOrBoolean()
+    {
+        var tokens = new Lexer("(bpm=129, free)").Tokenize();
+
+        Assert.Equal(TokenType.LPAREN, tokens[0].Type);
+
+        Assert.Equal(TokenType.IDENT, tokens[1].Type);
+        Assert.Equal("bpm", tokens[1].Value);
+
+        Assert.Equal(TokenType.EQUALS, tokens[2].Type);
+
+        Assert.Equal(TokenType.NUMBER, tokens[3].Type);
+        Assert.Equal("129", tokens[3].Value);
+
+        Assert.Equal(TokenType.COMMA, tokens[4].Type);
+
+        // "free" não tem "=valor" depois, então o lexer só o enxerga como um
+        // IDENT solto; não existe token BOOLEAN aqui — quem decide que um
+        // parâmetro sem valor assume "true" é o parser, não o lexer.
+        Assert.Equal(TokenType.IDENT, tokens[5].Type);
+        Assert.Equal("free", tokens[5].Value);
+
+        Assert.Equal(TokenType.RPAREN, tokens[6].Type);
+
+        Assert.Equal(TokenType.EOF, tokens[7].Type);
+    }
+
     [Fact]
     public void TokenizeFullSongBlockReturnsExpectedTokenSequence()
     {

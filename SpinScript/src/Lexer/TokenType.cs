@@ -2,6 +2,7 @@ namespace SpinScript.Lexer;
 
 public enum TokenType
 {
+    BOOLEAN,
     STRING_LITERAL,
     SEMICOLON,
     EQUALS,

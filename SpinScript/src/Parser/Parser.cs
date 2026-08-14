@@ -130,6 +130,7 @@ public class Parser
             switch (token.Type)
             {
                 case TokenType.PLAY: statements.Add(ParsePlay()); break;
+                case TokenType.REFERENCE: statements.Add(ParseReference()); break;
                 case TokenType.EOF:
                     throw new ParserException($"Unexpected EOF inside song body. Expected closing '}}'.", token.Line, token.Column);
                 default:
@@ -175,6 +176,8 @@ public class Parser
     {
         var loopToken = Consume(TokenType.LOOP);
         var loopCountToken = Consume(TokenType.REFERENCE);
+
+        ParseParams();
 
         Consume(TokenType.LBRACE);
 
@@ -294,6 +297,24 @@ public class Parser
     private void ParseParam(Dictionary<string, string> parameters)
     {
         var paramName = Consume(TokenType.IDENT);
+
+        if (!Check(TokenType.EQUALS))
+        {
+            // If dont have an equals, only the IDENT, so we can assume its a boolean flag, and set it to true
+            if (!parameters.TryAdd(paramName.Value, "true"))
+            {
+                throw new ParserException($"Parameter '{paramName.Value}' was already set.", paramName.Line, paramName.Column);
+            }
+
+            if (Check(TokenType.COMMA) || Check(TokenType.RPAREN))
+            {
+                return;
+            }
+            else
+            {
+                throw new ParserException($"Expected a comma or closing parenthesis after parameter or set a new value to '{paramName.Value}' but received token '{Peek()}'.", paramName.Line, paramName.Column);
+            }
+        }
         Consume(TokenType.EQUALS);
 
         Token value;
@@ -303,6 +324,13 @@ public class Parser
         } else if (Check(TokenType.NUMBER))
         {
             value = Consume(TokenType.NUMBER);
+        } else if (Check(TokenType.REFERENCE))
+        {
+            value = Consume(TokenType.REFERENCE);
+        }
+        else if (Check(TokenType.BOOLEAN))
+        {
+            value = Consume(TokenType.BOOLEAN);
         }
         else
         {

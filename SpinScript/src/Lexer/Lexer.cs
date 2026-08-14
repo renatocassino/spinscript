@@ -23,6 +23,12 @@ public class Lexer
         ["pattern"] = TokenType.PATTERN,
     };
 
+    private static readonly Dictionary<string, TokenType> BooleanKeywords = new()
+    {
+        ["true"] = TokenType.BOOLEAN,
+        ["false"] = TokenType.BOOLEAN,
+    };
+
 
     public List<Token> Tokenize()
     {
@@ -164,6 +170,12 @@ public class Lexer
         }
 
         var word = _input[start.._index];
+
+        if (BooleanKeywords.TryGetValue(word, out var booleanType))
+        {
+            _tokens.Add(new Token(TokenType.BOOLEAN, word, startLine, startColumn));
+            return;
+        }
 
         if (Keywords.TryGetValue(word, out var keywordType))
         {
