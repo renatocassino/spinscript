@@ -20,7 +20,6 @@ public class Lexer
         ["loop"] = TokenType.LOOP,
         ["play"] = TokenType.PLAY,
         ["song"] = TokenType.SONG,
-        ["repeat"] = TokenType.REPEAT,
         ["pattern"] = TokenType.PATTERN,
     };
 
@@ -237,7 +236,7 @@ public class Lexer
         _index++;
         _column++;
 
-        _tokens.Add(new Token(TokenType.STRING, strValue, startLine, startColumn));
+        _tokens.Add(new Token(TokenType.STRING_LITERAL, strValue, startLine, startColumn));
     }
 
     private void AddVariableReferenceToken()

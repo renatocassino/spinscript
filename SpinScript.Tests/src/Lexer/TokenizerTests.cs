@@ -56,7 +56,7 @@ public class TokenizerTests
         Assert.Equal(TokenType.EQUALS, tokens[1].Type);
         Assert.Equal("=", tokens[1].Value);
 
-        Assert.Equal(TokenType.STRING, tokens[2].Type);
+        Assert.Equal(TokenType.STRING_LITERAL, tokens[2].Type);
         Assert.Equal("/guitar.midi", tokens[2].Value);
 
         Assert.Equal(TokenType.SEMICOLON, tokens[3].Type);
@@ -77,7 +77,7 @@ public class TokenizerTests
         Assert.Equal(TokenType.EQUALS, tokens[1].Type);
         Assert.Equal("=", tokens[1].Value);
 
-        Assert.Equal(TokenType.STRING, tokens[2].Type);
+        Assert.Equal(TokenType.STRING_LITERAL, tokens[2].Type);
         Assert.Equal("/guitar.midi", tokens[2].Value);
 
         Assert.Equal(TokenType.SEMICOLON, tokens[3].Type);
@@ -94,7 +94,7 @@ public class TokenizerTests
     {
         var tokens = new Lexer(input).Tokenize();
 
-        Assert.Equal(TokenType.STRING, tokens[2].Type);
+        Assert.Equal(TokenType.STRING_LITERAL, tokens[2].Type);
         Assert.Equal("", tokens[2].Value);
     }
 
@@ -103,7 +103,7 @@ public class TokenizerTests
     {
         var tokens = new Lexer("@x = \"it's fine\";").Tokenize();
 
-        Assert.Equal(TokenType.STRING, tokens[2].Type);
+        Assert.Equal(TokenType.STRING_LITERAL, tokens[2].Type);
         Assert.Equal("it's fine", tokens[2].Value);
     }
 
@@ -112,7 +112,7 @@ public class TokenizerTests
     {
         var tokens = new Lexer("@x = 'She said \"hi\"';").Tokenize();
 
-        Assert.Equal(TokenType.STRING, tokens[2].Type);
+        Assert.Equal(TokenType.STRING_LITERAL, tokens[2].Type);
         Assert.Equal("She said \"hi\"", tokens[2].Value);
     }
 
@@ -159,7 +159,7 @@ public class TokenizerTests
         Assert.Equal(TokenType.LPAREN, tokens[5].Type);
         Assert.Equal("(", tokens[5].Value);
 
-        Assert.Equal(TokenType.REPEAT, tokens[6].Type);
+        Assert.Equal(TokenType.IDENT, tokens[6].Type);
         Assert.Equal("repeat", tokens[6].Value);
 
         Assert.Equal(TokenType.EQUALS, tokens[7].Type);
@@ -602,7 +602,6 @@ public class TokenizerTests
     [InlineData("loop", TokenType.LOOP)]
     [InlineData("play", TokenType.PLAY)]
     [InlineData("song", TokenType.SONG)]
-    [InlineData("repeat", TokenType.REPEAT)]
     public void TokenizeKeywordsReturnsCorrespondingTokenType(string keyword, TokenType expected)
     {
         var tokens = new Lexer(keyword).Tokenize();
@@ -702,7 +701,7 @@ public class TokenizerTests
             TokenType.SONG,
             TokenType.LBRACE,
             TokenType.LOOP,
-            TokenType.REPEAT,
+            TokenType.IDENT,
             TokenType.REFERENCE,
             TokenType.LBRACE,
             TokenType.PLAY,

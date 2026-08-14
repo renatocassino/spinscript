@@ -2,7 +2,7 @@ namespace SpinScript.Lexer;
 
 public enum TokenType
 {
-    STRING,
+    STRING_LITERAL,
     SEMICOLON,
     EQUALS,
     NUMBER,
@@ -14,7 +14,6 @@ public enum TokenType
     LOOP,
     PLAY,
     EOF,
-    REPEAT,
     PATTERN,
     REFERENCE,
     IDENT,

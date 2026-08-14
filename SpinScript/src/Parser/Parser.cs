@@ -214,9 +214,9 @@ public class Parser
         if (Check(TokenType.NUMBER))
         {
             value = Consume(TokenType.NUMBER);
-        } else if (Check(TokenType.STRING))
+        } else if (Check(TokenType.STRING_LITERAL))
         {
-            value = Consume(TokenType.STRING);
+            value = Consume(TokenType.STRING_LITERAL);
         }
         else
         {
@@ -269,9 +269,9 @@ public class Parser
         Consume(TokenType.EQUALS);
 
         Token value;
-        if (Check(TokenType.STRING))
+        if (Check(TokenType.STRING_LITERAL))
         {
-            value = Consume(TokenType.STRING);
+            value = Consume(TokenType.STRING_LITERAL);
         } else if (Check(TokenType.NUMBER))
         {
             value = Consume(TokenType.NUMBER);
