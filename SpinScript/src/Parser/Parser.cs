@@ -161,6 +161,9 @@ public class Parser
                 case TokenType.LOOP: statements.Add(ParseLoop()); break;
                 case TokenType.REFERENCE: statements.Add(ParseReference()); break;
                 case TokenType.PATTERN: statements.Add(ParsePattern()); break;
+                case TokenType.PLAY: statements.Add(ParsePlay()); break;
+                case TokenType.EOF:
+                    throw new ParserException($"Unexpected EOF inside loop body. Expected closing '}}'.", token.Line, token.Column);
                 default:
                     throw new ParserException($"Cannot parse token '{token.Type}' with value '{token.Value}' inside loop.", token.Line, token.Column);
             }

@@ -40,6 +40,8 @@ loop @intro {
     loop @firstPhase {
         loop @instrumental {
             @introMidi = "/intro.mid";
+
+            play @firstPhase (bpm=120, volume=80);
         }
     }
 }
@@ -59,6 +61,11 @@ loop @intro {
         var playStatement = Assert.IsType<AssignmentNode>(instrumentalLoop.Statements[0]);
         Assert.Equal("introMidi", playStatement.Name);
         Assert.Equal("/intro.mid", playStatement.Value);
+
+        var playStatement2 = Assert.IsType<PlayNode>(instrumentalLoop.Statements[1]);
+        Assert.Equal("firstPhase", playStatement2.PatternName);
+        Assert.Equal("120", playStatement2.Parameters["bpm"]);
+        Assert.Equal("80", playStatement2.Parameters["volume"]);
     }
 
     [Fact]
