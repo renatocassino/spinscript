@@ -11,3 +11,5 @@ public record PatternNode(string Name, Dictionary<string, string> Parameters, Li
 public record LoopNode(string Name, List<AstNode> Statements, int Line, int Column) : AstNode;
 
 public record PlayNode(string PatternName, Dictionary<string, string> Parameters, int Line, int Column) : AstNode;
+
+public record SongNode(List<AstNode> Statements, int Line, int Column) : AstNode;

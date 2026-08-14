@@ -50,6 +50,7 @@ public class Parser
                 case TokenType.LOOP: statements.Add(ParseLoop()); break;
                 case TokenType.PLAY: statements.Add(ParsePlay()); break;
                 case TokenType.EOF: ParseEOF(); break;
+                case TokenType.SONG: statements.Add(ParseSong()); break;
                 default:
                     throw new ParserException($"Cannot parse token '{token.Type}' with value '{token.Value}'", token.Line, token.Column);
             }
@@ -112,6 +113,33 @@ public class Parser
 
         Consume(TokenType.RPAREN);
         return parameters;
+    }
+
+    public SongNode ParseSong()
+    {
+        var songToken = Consume(TokenType.SONG);
+        ParseParams();
+        Consume(TokenType.LBRACE);
+
+        var statements = new List<AstNode>();
+
+        while (!Check(TokenType.RBRACE))
+        {
+            var token = _tokens[_index];
+
+            switch (token.Type)
+            {
+                case TokenType.PLAY: statements.Add(ParsePlay()); break;
+                case TokenType.EOF:
+                    throw new ParserException($"Unexpected EOF inside song body. Expected closing '}}'.", token.Line, token.Column);
+                default:
+                    throw new ParserException($"Cannot parse token '{token.Type}' with value '{token.Value}' inside song.", token.Line, token.Column);
+            }
+        }
+
+        Consume(TokenType.RBRACE);
+
+        return new SongNode(statements, songToken.Line, songToken.Column);
     }
 
     /// <summary>
