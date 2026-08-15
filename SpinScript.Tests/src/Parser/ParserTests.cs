@@ -21,15 +21,15 @@ public class ParserTests
         var assignment = Assert.IsType<AssignmentNode>(program.Statements[0]);
 
         Assert.Equal("bpm", assignment.Name);
-        Assert.Equal("129", assignment.Value);
+        Assert.Equal(129, assignment.Value.AsNumber());
 
         var assignment2 = Assert.IsType<AssignmentNode>(program.Statements[1]);
         Assert.Equal("steps", assignment2.Name);
-        Assert.Equal("3", assignment2.Value);
+        Assert.Equal(3, assignment2.Value.AsNumber());
 
         var assignment3 = Assert.IsType<AssignmentNode>(program.Statements[2]);
         Assert.Equal("volume", assignment3.Name);
-        Assert.Equal("120", assignment3.Value);
+        Assert.Equal(120, assignment3.Value.AsNumber());
     }
 
     [Fact]
@@ -60,12 +60,12 @@ loop @intro {
 
         var playStatement = Assert.IsType<AssignmentNode>(instrumentalLoop.Statements[0]);
         Assert.Equal("introMidi", playStatement.Name);
-        Assert.Equal("/intro.mid", playStatement.Value);
+        Assert.Equal("/intro.mid", playStatement.Value.AsString());
 
         var playStatement2 = Assert.IsType<PlayNode>(instrumentalLoop.Statements[1]);
         Assert.Equal("firstPhase", playStatement2.PatternName);
-        Assert.Equal("120", playStatement2.Parameters["bpm"]);
-        Assert.Equal("80", playStatement2.Parameters["volume"]);
+        Assert.Equal(120, playStatement2.Parameters["bpm"].AsInt());
+        Assert.Equal(80, playStatement2.Parameters["volume"].AsInt());
     }
 
     [Fact]
@@ -79,8 +79,8 @@ play @song1 (bpm=120, volume=80);
         Assert.Equal("song1", play.PatternName);
 
         var parameter = play.Parameters;
-        Assert.Equal("120", parameter["bpm"]);
-        Assert.Equal("80", parameter["volume"]);
+        Assert.Equal(120, parameter["bpm"].AsInt());
+        Assert.Equal(80, parameter["volume"].AsInt());
     }
 
     [Theory]
@@ -114,13 +114,13 @@ play @song1 (bpm=120, volume=80);
         var pattern = Assert.IsType<PatternNode>(program.Statements[0]);
 
         Assert.Equal("kick", pattern.Name);
-        Assert.Equal("16", pattern.Parameters["grid"]);
+        Assert.Equal(16, pattern.Parameters["grid"].AsInt());
         Assert.Equal(["9"], pattern.Steps);
 
         var pattern2 = Assert.IsType<PatternNode>(program.Statements[1]);
 
         Assert.Equal("hats", pattern2.Name);
-        Assert.Equal("16", pattern2.Parameters["grid"]);
+        Assert.Equal(16, pattern2.Parameters["grid"].AsInt());
         Assert.Equal(["3", "7", "11", "15"], pattern2.Steps);
     }
 }

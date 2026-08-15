@@ -22,6 +22,10 @@ public class Parser
     /// purely on the resulting token list instead of interleaving lexing
     /// and parsing.
     /// </summary>
+    /// <example>
+    /// <c>new Parser("@bpm = 129;")</c> tokenizes the input immediately;
+    /// call <see cref="Parse"/> afterwards to build the AST.
+    /// </example>
     public Parser(string input)
     {
         _tokens = new Lexer(input).Tokenize();
@@ -35,6 +39,12 @@ public class Parser
     /// the EOF token is reached, collecting every parsed node into the
     /// resulting <see cref="ProgramNode"/>.
     /// </summary>
+    /// <example>
+    /// <c>"@bpm = 129; pattern @kick (grid=16) { 9 }; play @kick;"</c>
+    /// validates and yields a <see cref="ProgramNode"/> with three
+    /// statements: an <see cref="AssignmentNode"/>, a <see cref="PatternNode"/>
+    /// and a <see cref="PlayNode"/>.
+    /// </example>
     public ProgramNode Parse()
     {
         var statements = new List<AstNode>();
@@ -65,6 +75,10 @@ public class Parser
     /// tokens follow EOF, which should never happen coming from the lexer
     /// but is validated here as a defensive terminal check.
     /// </summary>
+    /// <example>
+    /// <c>""</c> (empty input) tokenizes to a single EOF token, so
+    /// <c>ParseEOF()</c> consumes it and returns without throwing.
+    /// </example>
     public void ParseEOF()
     {
         Consume(TokenType.EOF);
@@ -76,11 +90,18 @@ public class Parser
     }
 
     /// <summary>
-    /// Intended to parse a <c>play</c> statement: <c>play @name pattern-list;</c>,
-    /// where the pattern list references previously declared patterns, each
-    /// optionally followed by its own arguments. Work in progress — the body
-    /// currently does not compile, see <see cref="ParseParam"/> usage below.
+    /// Parses a <c>play</c> statement: <c>play @name (param, ...)?;</c>,
+    /// where <c>@name</c> references a previously declared pattern and the
+    /// optional parenthesized list is parsed by <see cref="ParseParameters"/>.
     /// </summary>
+    /// <example>
+    /// <c>"play @intro;"</c> → <c>PlayNode</c> with <c>PatternName == "intro"</c>
+    /// and no parameters.<br/>
+    /// <c>"play @chord (bpm=129, sample=@kick, free, free=true);"</c> → same
+    /// node with <c>Parameters == { bpm: "129", sample: "kick", free: "true" }</c>
+    /// (the duplicate <c>free</c> key here would actually throw — see
+    /// <see cref="ParseParam"/>).
+    /// </example>
     public PlayNode ParsePlay()
     {
         Consume(TokenType.PLAY);
@@ -92,9 +113,24 @@ public class Parser
         return new PlayNode(patternRef.Value, parameters, patternRef.Line, patternRef.Column);
     }
 
-    public Dictionary<string, string> ParseParameters()
+    /// <summary>
+    /// Parses the optional parenthesized parameter list that follows a
+    /// <c>play</c> statement's pattern reference. Functionally identical to
+    /// <see cref="ParseParams"/> — both wrap the same comma-separated
+    /// <c>key=value</c> / bare-flag grammar handled by <see cref="ParseParam"/> —
+    /// this copy exists specifically for <see cref="ParsePlay"/>.
+    /// </summary>
+    /// <example>
+    /// <c>"(bpm=129, sample=@kick, free, free=true)"</c> →
+    /// <c>{ bpm: "129", sample: "kick", free: "true" }</c> (again, only one
+    /// of the two <c>free</c> entries may appear per call, see
+    /// <see cref="ParseParam"/>).<br/>
+    /// No leading <c>(</c> at all (e.g. the input is just <c>";"</c>) →
+    /// returns an empty dictionary without consuming anything.
+    /// </example>
+    public Dictionary<string, SpinValue> ParseParameters()
     {
-        var parameters = new Dictionary<string, string>();
+        var parameters = new Dictionary<string, SpinValue>();
 
         if (!Match(TokenType.LPAREN))
         {
@@ -115,6 +151,18 @@ public class Parser
         return parameters;
     }
 
+    /// <summary>
+    /// Parses a <c>song</c> block: <c>song (param, ...)? { statement* }</c>.
+    /// The optional parenthesized parameter list is parsed by
+    /// <see cref="ParseParams"/>; the body may contain <c>play</c> statements
+    /// and reference assignments.
+    /// </summary>
+    /// <example>
+    /// <c>"song { play @intro; @volume = 80; }"</c> → <c>SongNode</c> with
+    /// two statements: a <see cref="PlayNode"/> and an <see cref="AssignmentNode"/>.<br/>
+    /// <c>"song (bpm=129) { }"</c> → <c>SongNode</c> with an empty body
+    /// (the <c>bpm</c> parameter is currently parsed but discarded).
+    /// </example>
     public SongNode ParseSong()
     {
         var songToken = Consume(TokenType.SONG);
@@ -150,16 +198,22 @@ public class Parser
     /// the step list is a comma-separated sequence of numbers enclosed in
     /// braces (see <see cref="ParseSteps"/>).
     /// </summary>
+    /// <example>
+    /// <c>"pattern @kick (grid=16, sample=@kick, free, free=true) { 1, 5, 9, 13 };"</c>
+    /// → <c>PatternNode</c> with <c>Name == "kick"</c>,
+    /// <c>Parameters == { grid: "16", sample: "kick", free: "true" }</c>
+    /// and <c>Steps == ["1", "5", "9", "13"]</c>.<br/>
+    /// <c>"pattern @hats { };"</c> → same node shape with no parameters and
+    /// an empty step list.
+    /// </example>
     public AstNode ParsePattern()
     {
         Consume(TokenType.PATTERN);
         var patternName = Consume(TokenType.REFERENCE);
-
         var parameters = ParseParams();
 
-        var steps = new List<string>();
         Consume(TokenType.LBRACE);
-        steps = ParseSteps();
+        var steps = ParseSteps();
         Consume(TokenType.RBRACE);
         Consume(TokenType.SEMICOLON);
 
@@ -172,6 +226,14 @@ public class Parser
     /// itself recursively when it encounters another <c>loop</c> token,
     /// which is what allows arbitrarily deep loop nesting.
     /// </summary>
+    /// <example>
+    /// <c>"loop @times (bpm=129, free) { play @kick; }"</c> → <c>LoopNode</c>
+    /// with <c>Name == "times"</c> and a single <see cref="PlayNode"/>
+    /// statement (the <c>(bpm=129, free)</c> parameters are currently parsed
+    /// but discarded, see <see cref="ParseParam"/> for what each form means).<br/>
+    /// <c>"loop @n { loop @m { } }"</c> → <c>LoopNode</c> whose single
+    /// statement is itself a nested <c>LoopNode</c>.
+    /// </example>
     public LoopNode ParseLoop()
     {
         var loopToken = Consume(TokenType.LOOP);
@@ -210,6 +272,11 @@ public class Parser
     /// braces, e.g. <c>{ 1, 5, 9, 13 }</c>. Returns an empty list when the
     /// braces are immediately closed (an empty pattern body is valid).
     /// </summary>
+    /// <example>
+    /// <c>"{ 1, 5, 9, 13 }"</c> (called right after consuming the leading
+    /// <c>{</c>) → <c>["1", "5", "9", "13"]</c>.<br/>
+    /// <c>"{ }"</c> → <c>[]</c>.
+    /// </example>
     private List<string> ParseSteps()
     {
         var steps = new List<string>();
@@ -234,6 +301,15 @@ public class Parser
     /// <c>value</c> is either a number or a string literal. Used both for
     /// top-level assignments and for assignments nested inside a loop body.
     /// </summary>
+    /// <example>
+    /// <c>"@bpm = 129;"</c> → <c>AssignmentNode</c> with
+    /// <c>Name == "bpm"</c>, <c>Value == "129"</c>.<br/>
+    /// <c>"@guitarMidi = \"/guitar.mid\";"</c> → <c>Name == "guitarMidi"</c>,
+    /// <c>Value == "/guitar.mid"</c>.<br/>
+    /// Note this method does not (yet) accept a <c>BOOLEAN</c> token, so
+    /// <c>"@muted = true;"</c> throws — unlike <see cref="ParseParam"/>,
+    /// which does.
+    /// </example>
     public AssignmentNode ParseReference()
     {
         var currentToken = Consume(TokenType.REFERENCE);
@@ -241,13 +317,17 @@ public class Parser
         var varName = currentToken.Value;
         Consume(TokenType.EQUALS);
 
-        Token value;
+        SpinValue value;
         if (Check(TokenType.NUMBER))
         {
-            value = Consume(TokenType.NUMBER);
+            value = new SpinValue.NumberValue(double.Parse(Consume(TokenType.NUMBER).Value));
         } else if (Check(TokenType.STRING_LITERAL))
         {
-            value = Consume(TokenType.STRING_LITERAL);
+            value = new SpinValue.StringValue(Consume(TokenType.STRING_LITERAL).Value);
+        }
+        else if (Check(TokenType.BOOLEAN))
+        {
+            value = new SpinValue.BooleanValue(bool.Parse(Consume(TokenType.BOOLEAN).Value));
         }
         else
         {
@@ -256,7 +336,7 @@ public class Parser
         
         Consume(TokenType.SEMICOLON);
 
-        return new AssignmentNode(varName, value.Value, currentToken.Line, currentToken.Column);
+        return new AssignmentNode(varName, value, currentToken.Line, currentToken.Column);
     }
 
     /// <summary>
@@ -264,11 +344,20 @@ public class Parser
     /// <c>(grid=16, offset=2)</c>. The parentheses themselves are optional —
     /// when absent, an empty parameter dictionary is returned; when present,
     /// they wrap a comma-separated, variable-length list of key=value pairs
-    /// (see <see cref="ParseParam"/>).
+    /// (see <see cref="ParseParam"/>). Functionally identical to
+    /// <see cref="ParseParameters"/>; used by <see cref="ParseSong"/>,
+    /// <see cref="ParsePattern"/> and <see cref="ParseLoop"/>.
     /// </summary>
-    private Dictionary<string, string> ParseParams()
+    /// <example>
+    /// <c>"(grid=16, sample=@kick, free, free=true)"</c> →
+    /// <c>{ grid: "16", sample: "kick", free: "true" }</c> (only one
+    /// <c>free</c> entry may be present at a time, see <see cref="ParseParam"/>).<br/>
+    /// No <c>(</c> at all → returns an empty dictionary without consuming
+    /// anything, since the parameter list is optional.
+    /// </example>
+    private Dictionary<string, SpinValue> ParseParams()
     {
-        var parameters = new Dictionary<string, string>();
+        var parameters = new Dictionary<string, SpinValue>();
 
         if (!Match(TokenType.LPAREN))
         {
@@ -290,18 +379,38 @@ public class Parser
     }
 
     /// <summary>
-    /// Parses a single <c>key=value</c> parameter entry (value is a number
-    /// or a string literal) and adds it to the given dictionary, throwing
-    /// if the same key was already set earlier in the same parameter list.
+    /// Parses a single parameter entry — either <c>key=value</c> or a bare
+    /// <c>key</c> flag — and adds it to the given dictionary, throwing if
+    /// the same key was already set earlier in the same parameter list.
+    /// A bare <c>key</c> (no <c>=</c> follows it) is treated as a boolean
+    /// flag and stored as the string <c>"true"</c>, since the value is
+    /// implied by the parameter's mere presence.
     /// </summary>
-    private void ParseParam(Dictionary<string, string> parameters)
+    /// <example>
+    /// <c>bpm=129</c> → value comes from a <c>NUMBER</c> token, stored as
+    /// <c>"129"</c>.<br/>
+    /// <c>sample=@kick</c> → value comes from a <c>REFERENCE</c> token,
+    /// stored as <c>"kick"</c> (referencing a variable/pattern by name).<br/>
+    /// <c>free</c> (no <c>=</c>, immediately followed by <c>,</c> or <c>)</c>)
+    /// → treated as a boolean flag, stored as <c>"true"</c> without ever
+    /// consuming an <c>EQUALS</c> token.<br/>
+    /// <c>free=true</c> → value comes explicitly from a <c>BOOLEAN</c>
+    /// token, also stored as <c>"true"</c> — same resulting value as the
+    /// bare-flag form above, just spelled out.<br/>
+    /// <c>label="intro"</c> → value comes from a <c>STRING_LITERAL</c>
+    /// token, stored as <c>"intro"</c>.<br/>
+    /// <c>bpm=129, bpm=140</c> in the same parameter list → throws
+    /// <see cref="ParserException"/> on the second occurrence, since
+    /// <c>bpm</c> was already set.
+    /// </example>
+    private void ParseParam(Dictionary<string, SpinValue> parameters)
     {
         var paramName = Consume(TokenType.IDENT);
 
         if (!Check(TokenType.EQUALS))
         {
             // If dont have an equals, only the IDENT, so we can assume its a boolean flag, and set it to true
-            if (!parameters.TryAdd(paramName.Value, "true"))
+            if (!parameters.TryAdd(paramName.Value, new SpinValue.BooleanValue(true)))
             {
                 throw new ParserException($"Parameter '{paramName.Value}' was already set.", paramName.Line, paramName.Column);
             }
@@ -317,27 +426,27 @@ public class Parser
         }
         Consume(TokenType.EQUALS);
 
-        Token value;
+        SpinValue value;
         if (Check(TokenType.STRING_LITERAL))
         {
-            value = Consume(TokenType.STRING_LITERAL);
+            value = new SpinValue.StringValue(Consume(TokenType.STRING_LITERAL).Value);
         } else if (Check(TokenType.NUMBER))
         {
-            value = Consume(TokenType.NUMBER);
+            value = new SpinValue.NumberValue(double.Parse(Consume(TokenType.NUMBER).Value));
         } else if (Check(TokenType.REFERENCE))
         {
-            value = Consume(TokenType.REFERENCE);
+            value = new SpinValue.StringValue(Consume(TokenType.REFERENCE).Value);
         }
         else if (Check(TokenType.BOOLEAN))
         {
-            value = Consume(TokenType.BOOLEAN);
+            value = new SpinValue.BooleanValue(bool.Parse(Consume(TokenType.BOOLEAN).Value));
         }
         else
         {
             throw new ParserException($"Expected a number or string after '=' but received token '{Peek()}'.", paramName.Line, paramName.Column);
         }
 
-        if (!parameters.TryAdd(paramName.Value, value.Value))
+        if (!parameters.TryAdd(paramName.Value, value))
         {
             throw new ParserException($"Parameter '{paramName.Value}' was already set.", paramName.Line, paramName.Column);
         }
@@ -349,6 +458,12 @@ public class Parser
     /// production ultimately bottoms out in a call to this method to
     /// consume the terminals it expects.
     /// </summary>
+    /// <example>
+    /// Current token is <c>EQUALS</c> and <c>expected == TokenType.EQUALS</c>
+    /// → returns that token and advances past it.<br/>
+    /// Current token is <c>NUMBER</c> and <c>expected == TokenType.EQUALS</c>
+    /// → throws <see cref="ParserException"/> without advancing.
+    /// </example>
     public Token Consume(TokenType expected)
     {
         var currentToken = _tokens[_index];
@@ -367,6 +482,11 @@ public class Parser
     /// callers decide which production to take (e.g. whether an assignment
     /// value is a number or a string) before committing the index forward.
     /// </summary>
+    /// <example>
+    /// Tokens are <c>[NUMBER("129"), SEMICOLON, EOF]</c> and <c>_index == 0</c>
+    /// → returns the <c>NUMBER("129")</c> token, <c>_index</c> stays at
+    /// <c>0</c>.
+    /// </example>
     private Token Peek() => _tokens[_index];
 
     /// <summary>
@@ -374,6 +494,13 @@ public class Parser
     /// consuming it. The one-token-lookahead building block behind both
     /// <see cref="Match"/> and every switch-based dispatch in this class.
     /// </summary>
+    /// <example>
+    /// Current token is <c>COMMA</c> → <c>Check(TokenType.COMMA)</c> is
+    /// <c>true</c>, <c>Check(TokenType.RPAREN)</c> is <c>false</c>, and
+    /// neither call advances <c>_index</c>.<br/>
+    /// <c>_index</c> is already past the end of the token list → returns
+    /// <c>false</c> instead of throwing an out-of-range exception.
+    /// </example>
     private bool Check(TokenType type) => _index < _tokens.Count && Peek().Type == type;
 
     /// <summary>
@@ -382,6 +509,13 @@ public class Parser
     /// the trailing comma in a comma-separated list) where a mismatch is
     /// not an error, just a signal to stop.
     /// </summary>
+    /// <example>
+    /// Current token is <c>COMMA</c> and <c>type == TokenType.COMMA</c>
+    /// → returns <c>true</c> and advances past it (used by
+    /// <see cref="ParseParams"/> to loop over <c>param, param, param</c>).<br/>
+    /// Current token is <c>RPAREN</c> and <c>type == TokenType.COMMA</c>
+    /// → returns <c>false</c> without advancing, signaling the list is done.
+    /// </example>
     private bool Match(TokenType type)
     {
         if (!Check(type))

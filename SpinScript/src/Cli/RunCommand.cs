@@ -62,17 +62,62 @@ public sealed class RunCommand : Command<RunSettings>
 
         foreach (var statement in program.Statements)
         {
-            tree.AddNode(DescribeNode(statement));
+            AddNode(tree, statement);
         }
 
         AnsiConsole.Write(tree);
     }
 
-    private static string DescribeNode(AstNode node) => node switch
+    private static void AddNode(IHasTreeNodes parent, AstNode node)
     {
-        AssignmentNode a => $"[yellow]@{Markup.Escape(a.Name)}[/] [grey]=[/] [cyan]{Markup.Escape(a.Value)}[/]",
-        PatternNode p => DescribePattern(p),
-        _ => Markup.Escape(node.ToString() ?? node.GetType().Name),
+        switch (node)
+        {
+            case LoopNode loop:
+                var loopNode = parent.AddNode(
+                    $"[magenta]loop[/] [yellow]@{Markup.Escape(loop.Name)}[/] " +
+                    $"[grey]({loop.Statements.Count} statement(s))[/]");
+                foreach (var child in loop.Statements)
+                {
+                    AddNode(loopNode, child);
+                }
+                break;
+
+            case SongNode song:
+                var songNode = parent.AddNode(
+                    $"[magenta]song[/] [grey]({song.Statements.Count} statement(s))[/]");
+                foreach (var child in song.Statements)
+                {
+                    AddNode(songNode, child);
+                }
+                break;
+
+            case AssignmentNode assignment:
+                parent.AddNode(DescribeAssignment(assignment));
+                break;
+
+            case PatternNode pattern:
+                parent.AddNode(DescribePattern(pattern));
+                break;
+
+            case PlayNode play:
+                parent.AddNode(DescribePlay(play));
+                break;
+
+            default:
+                parent.AddNode(Markup.Escape(node.ToString() ?? node.GetType().Name));
+                break;
+        }
+    }
+
+    private static string DescribeAssignment(AssignmentNode assignment) =>
+        $"[yellow]@{Markup.Escape(assignment.Name)}[/] [grey]=[/] {DescribeValue(assignment.Value)}";
+
+    private static string DescribeValue(SpinValue value) => value switch
+    {
+        SpinValue.StringValue s => $"[green]\"{Markup.Escape(s.Value)}\"[/]",
+        SpinValue.NumberValue n => $"[cyan]{n.Value}[/]",
+        SpinValue.BooleanValue b => $"[magenta]{(b.Value ? "true" : "false")}[/]",
+        _ => Markup.Escape(value.ToString() ?? value.GetType().Name),
     };
 
     private static string DescribePattern(PatternNode pattern)
@@ -83,6 +128,14 @@ public sealed class RunCommand : Command<RunSettings>
         return $"[magenta]pattern[/] [yellow]{Markup.Escape(pattern.Name)}[/]" +
                $"[grey]({Markup.Escape(parameters)})[/] " +
                $"[grey]{{[/] [cyan]{Markup.Escape(steps)}[/] [grey]}}[/]";
+    }
+
+    private static string DescribePlay(PlayNode play)
+    {
+        var parameters = string.Join(", ", play.Parameters.Select(kv => $"{kv.Key}={kv.Value}"));
+
+        return $"[magenta]play[/] [yellow]@{Markup.Escape(play.PatternName)}[/] " +
+               $"[grey]({Markup.Escape(parameters)})[/]";
     }
 
     private static void WriteErrorPanel(string title, string message)

@@ -162,6 +162,7 @@ public class Lexer
         int startColumn = _column;
         _index++;
         _column++;
+
         while (_index < _input.Length &&
             (char.IsLetterOrDigit(_input[_index]) || _input[_index] == '_'))
         {
