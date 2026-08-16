@@ -98,4 +98,40 @@ song {
             Console.WriteLine($"Sample: {soundEvent.Sample}, Time: {soundEvent.Time}, Velocity: {soundEvent.Velocity}");
         }
     }
+
+    [Fact]
+    public void RepeatingALoopAtSongLevelDoesNotAddExtraBarGaps()
+    {
+        // @bpm=120, beatsPerBar=4 (default) => 1 bar = 2000ms exactly.
+        // `groove` has no `bars` param and its only statement is a bare
+        // pattern play, so it should fall back to occupying exactly 1 bar.
+        // `intro` repeats `groove` twice, so it should occupy exactly 4000ms
+        // (2000ms per groove repeat), with no extra bar added on top.
+        var input = """
+@bpm = 120;
+@kick = "kick.wav";
+
+pattern @beat (sample=@kick, grid=16) {
+    1
+};
+
+loop @groove {
+    play @beat;
+}
+
+loop @intro {
+    play @groove (repeat=2);
+}
+
+song {
+    play @intro (repeat=2);
+}
+""";
+        var interpreter = new Interpreter(input);
+        interpreter.Interpret();
+
+        var times = interpreter.interpretResult.Events.Select(e => e.Time).ToList();
+
+        Assert.Equal([0, 2000, 4000, 6000], times);
+    }
 }

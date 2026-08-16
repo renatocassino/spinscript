@@ -124,12 +124,15 @@ public class Interpreter
                 break;
             case PatternNode pattern:
                 Console.WriteLine($"Pattern: {pattern.Name}");
+                // Return value (its bar duration) is intentionally discarded:
+                // sibling `play @pattern;` statements inside the same loop
+                // body are meant to layer on the same bar (see InterpretLoop's
+                // "body didn't advance time" fallback), not play back to back.
                 InterpretPattern(pattern);
                 break;
             case LoopNode loop:
                 Console.WriteLine($"Loop: {loop.Name}");
-                var durationLoop = InterpretLoop(loop);
-                _currentTime += durationLoop;
+                InterpretLoop(loop);
                 break;
             case PlayNode play:
                 var isLoop = _loops.ContainsKey(play.PatternName);
@@ -173,22 +176,35 @@ public class Interpreter
         }
     }
 
-    public int InterpretLoop(LoopNode loop)
+    public void InterpretLoop(LoopNode loop)
     {
-        var bars = loop.Parameters.ContainsKey("bars")
+        var explicitBars = loop.Parameters.ContainsKey("bars")
             ? loop.Parameters["bars"].AsInt()
-            : 1;
+            : (int?)null;
         var startTime = _currentTime;
-        var totalBars = loop.Parameters.ContainsKey("bars") ? loop.Parameters["bars"].AsInt() : -1;
 
         foreach (var statement in loop.Statements)
         {
-            // _currentTime = startTime;
             InterpretStatement(statement);
         }
 
-        int duration = (int)bars * (int)_songConfiguration.BarDurationMs;
-        return duration;
+        if (explicitBars.HasValue)
+        {
+            // Explicit `bars=` is an authoritative override: force the loop
+            // to occupy exactly that many bars, regardless of what its body
+            // actually advanced _currentTime by.
+            _currentTime = startTime + explicitBars.Value * (int)_songConfiguration.BarDurationMs;
+        }
+        else if (_currentTime == startTime)
+        {
+            // The body didn't advance time on its own (e.g. only bare
+            // pattern plays, which layer on the same bar instead of
+            // advancing) — default to a single bar.
+            _currentTime = startTime + (int)_songConfiguration.BarDurationMs;
+        }
+        // Otherwise, _currentTime already reflects exactly what the body
+        // consumed (e.g. nested loop plays advance it themselves) — leave
+        // it as is instead of adding a duration on top of that.
     }
 
     public int InterpretPattern(PatternNode pattern)
