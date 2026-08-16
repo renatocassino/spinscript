@@ -128,7 +128,8 @@ public class Interpreter
                 break;
             case LoopNode loop:
                 Console.WriteLine($"Loop: {loop.Name}");
-                InterpretLoop(loop);
+                var durationLoop = InterpretLoop(loop);
+                _currentTime += durationLoop;
                 break;
             case PlayNode play:
                 var isLoop = _loops.ContainsKey(play.PatternName);
@@ -165,45 +166,54 @@ public class Interpreter
         }
     }
 
-    public void InterpretLoop(LoopNode loop)
+    public int InterpretLoop(LoopNode loop)
     {
-        var hasParameterBars = loop.Parameters.ContainsKey("bars");
+        var bars = loop.Parameters.ContainsKey("bars")
+            ? loop.Parameters["bars"].AsInt()
+            : 1;
+        var startTime = _currentTime;
         var totalBars = loop.Parameters.ContainsKey("bars") ? loop.Parameters["bars"].AsInt() : -1;
 
         foreach (var statement in loop.Statements)
         {
-            if (!hasParameterBars && statement is PlayNode play)
-            {
-                if (_loops.ContainsKey(play.PatternName))
-                {
-                    var loopNode = _loops[play.PatternName];
-                    var loopBars = _songConfiguration.beatsPerBar;
-                    var repeats = play.Parameters.ContainsKey("repeat") ? play.Parameters["repeat"].AsInt() : 1;
+            // if (!hasParameterBars && statement is PlayNode play)
+            // {
+            //     if (_loops.ContainsKey(play.PatternName))
+            //     {
+            //         var loopNode = _loops[play.PatternName];
+            //         var loopBars = _songConfiguration.beatsPerBar;
+            //         var repeats = play.Parameters.ContainsKey("repeat") ? play.Parameters["repeat"].AsInt() : 1;
 
-                    if (loopNode.Parameters.ContainsKey("bars"))
-                    {
-                        loopBars = loopNode.Parameters["bars"].AsInt();
-                    } else
-                    {
-                        loopBars = _songConfiguration.beatsPerBar; // Default to beatsPerBar if not specified
-                    }
-                    totalBars = Math.Max(totalBars, loopBars * repeats);
+            //         if (loopNode.Parameters.ContainsKey("bars"))
+            //         {
+            //             loopBars = loopNode.Parameters["bars"].AsInt();
+            //         } else
+            //         {
+            //             loopBars = _songConfiguration.beatsPerBar; // Default to beatsPerBar if not specified
+            //         }
+            //         totalBars = Math.Max(totalBars, loopBars * repeats);
 
-                    Console.WriteLine($"Loop: {loop.Name} - Play Loop: {play.PatternName} - Bars: {loopBars}");
-                }
-                else if (_patterns.ContainsKey(play.PatternName))
-                {
-                    totalBars = Math.Max(totalBars, 1);
-                }
-            }
+            //         Console.WriteLine($"Loop: {loop.Name} - Play Loop: {play.PatternName} - Bars: {loopBars}");
+            //     }
+            //     else if (_patterns.ContainsKey(play.PatternName))
+            //     {
+            //         totalBars = Math.Max(totalBars, 1);
+            //     }
+            // }
 
+            _currentTime = startTime;
             InterpretStatement(statement);
         }
 
         _currentTime += (int)(_songConfiguration.BarDurationMs * (totalBars <= 0 ? 1 : totalBars));
+        int duration = (int)bars * (int)_songConfiguration.BarDurationMs;
+        _currentTime = startTime + duration;
+
+        return duration;
+
     }
 
-    public void InterpretPattern(PatternNode pattern)
+    public int InterpretPattern(PatternNode pattern)
     {
         var parameters = pattern.Parameters;
 
@@ -219,7 +229,7 @@ public class Interpreter
 
         if (free)
         {
-            return; // In the furure
+            return 0; // In the furure
         }
 
         Console.WriteLine($"Pattern: {pattern.Name} - Sample: {sample} - Grid: {grid} - Steps: {string.Join(", ", pattern.Steps)} - BPM: {bpm}");
@@ -231,5 +241,7 @@ public class Interpreter
             _interpretResult.Events.Add(soundEvent);
             Console.WriteLine($"Step: {statement} - Sample: {sample} - StartTime: {startTime}ms");
         }
+
+        return (int)_songConfiguration.BarDurationMs;
     }
 }

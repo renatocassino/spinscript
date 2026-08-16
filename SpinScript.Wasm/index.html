@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>SpinScript WASM</title>
+</head>
+<body>
+  <script type="module" src="./main.js"></script>
+  <script type="module">
+    await window.SpinScriptReady;
+    console.log(SpinScript.Parse("@bpm = 120;"));
+  </script>
+</body>
+</html>

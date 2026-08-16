@@ -8,6 +8,8 @@ clicar numa timeline.
 
 Arquivos usam a extensão `.spin`.
 
+sudo dotnet workload install wasm-tools
+
 ---
 
 ## Os conceitos, do menor pro maior

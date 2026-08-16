@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\SpinScript\SpinScript.csproj" />
+    <ProjectReference Include="..\SpinScript.Core\SpinScript.Core.csproj" />
   </ItemGroup>
 
 </Project>

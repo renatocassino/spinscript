@@ -11,4 +11,8 @@
     <PackageReference Include="Spectre.Console.Cli" Version="0.55.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\SpinScript.Core\SpinScript.Core.csproj" />
+  </ItemGroup>
+
 </Project>
