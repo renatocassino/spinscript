@@ -238,8 +238,7 @@ public class Parser
     {
         var loopToken = Consume(TokenType.LOOP);
         var loopCountToken = Consume(TokenType.REFERENCE);
-
-        ParseParams();
+        var parameters = ParseParams();
 
         Consume(TokenType.LBRACE);
 
@@ -264,7 +263,7 @@ public class Parser
 
         Consume(TokenType.RBRACE);
 
-        return new LoopNode(loopCountToken.Value, statements, loopToken.Line, loopToken.Column);
+        return new LoopNode(loopCountToken.Value, parameters, statements, loopToken.Line, loopToken.Column);
     }
 
     /// <summary>
@@ -277,20 +276,20 @@ public class Parser
     /// <c>{</c>) → <c>["1", "5", "9", "13"]</c>.<br/>
     /// <c>"{ }"</c> → <c>[]</c>.
     /// </example>
-    private List<string> ParseSteps()
+    private List<int> ParseSteps()
     {
-        var steps = new List<string>();
+        var steps = new List<int>();
 
         if (Check(TokenType.RBRACE))
         {
             return steps;
         }
 
-        steps.Add(Consume(TokenType.NUMBER).Value);
+        steps.Add(int.Parse(Consume(TokenType.NUMBER).Value));
 
         while (Match(TokenType.COMMA))
         {
-            steps.Add(Consume(TokenType.NUMBER).Value);
+            steps.Add(int.Parse(Consume(TokenType.NUMBER).Value));
         }
 
         return steps;

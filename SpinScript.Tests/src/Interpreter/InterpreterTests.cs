@@ -29,7 +29,7 @@ public class InterpreterTests
 // ===================================================================
 
 pattern @beat (sample=@kick, grid=16) {
-    1, 5, 9, 13
+    1, 5, 9, 13, 15
 };
 
 pattern @chimbal (sample=@hihat, grid=16) {
@@ -89,5 +89,12 @@ song {
 """;
         var interpreter = new Interpreter(input);
         interpreter.Interpret();
+
+        Console.WriteLine($"{interpreter.interpretResult.Events.Count}");
+
+        foreach (var soundEvent in interpreter.interpretResult.Events)
+        {
+            Console.WriteLine($"Sample: {soundEvent.Sample}, Time: {soundEvent.Time}, Velocity: {soundEvent.Velocity}");
+        }
     }
 }

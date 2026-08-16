@@ -115,12 +115,12 @@ play @song1 (bpm=120, volume=80);
 
         Assert.Equal("kick", pattern.Name);
         Assert.Equal(16, pattern.Parameters["grid"].AsInt());
-        Assert.Equal(["9"], pattern.Steps);
+        Assert.Equal([9], pattern.Steps);
 
         var pattern2 = Assert.IsType<PatternNode>(program.Statements[1]);
 
         Assert.Equal("hats", pattern2.Name);
         Assert.Equal(16, pattern2.Parameters["grid"].AsInt());
-        Assert.Equal(["3", "7", "11", "15"], pattern2.Steps);
+        Assert.Equal([3, 7, 11, 15], pattern2.Steps);
     }
 }

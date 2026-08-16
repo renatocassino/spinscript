@@ -41,9 +41,9 @@ public record SpinValue
 
 public record AssignmentNode(string Name, SpinValue Value, int Line, int Column) : AstNode;
 
-public record PatternNode(string Name, Dictionary<string, SpinValue> Parameters, List<string> Steps, int Line, int Column) : AstNode;
+public record PatternNode(string Name, Dictionary<string, SpinValue> Parameters, List<int> Steps, int Line, int Column) : AstNode;
 
-public record LoopNode(string Name, List<AstNode> Statements, int Line, int Column) : AstNode;
+public record LoopNode(string Name, Dictionary<string, SpinValue> Parameters, List<AstNode> Statements, int Line, int Column) : AstNode;
 
 public record PlayNode(string PatternName, Dictionary<string, SpinValue> Parameters, int Line, int Column) : AstNode;
 
