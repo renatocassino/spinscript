@@ -11,11 +11,65 @@ globalThis.SpinScriptReady = (async () => {
   throw error;
 });
 
-let isPlaying = true;
+let isPlaying = false;
 
 const textarea = document.querySelector('#spincode');
 const errorInput = document.getElementById('error');
 const playButton = document.getElementById('play');
+const highlightCode = document.getElementById('highlight-code');
+const highlightPre = document.getElementById('highlight');
+
+// Mirrors spinscript-vscode/syntaxes/spinscript.tmLanguage.json, in the same
+// precedence order (comments/strings/numbers first, punctuation last).
+const TOKEN_REGEX = new RegExp(
+    [
+        String.raw`(?<comment>/\*[\s\S]*?\*/|//.*)`,
+        String.raw`(?<string>"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')`,
+        String.raw`(?<number>\b[0-9]+(?:\.[0-9]+)?\b)`,
+        String.raw`(?<keyword>\b(?:song|loop|pattern|play)\b)`,
+        String.raw`(?<variable>@[A-Za-z][A-Za-z0-9_]*)`,
+        String.raw`(?<parameter>\b[A-Za-z_][A-Za-z0-9_]*\b(?=\s*=))`,
+    ].join('|'),
+    'g'
+);
+
+function escapeHtml(text) {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+function highlightSpinScript(code) {
+    let html = '';
+    let lastIndex = 0;
+
+    for (const match of code.matchAll(TOKEN_REGEX)) {
+        html += escapeHtml(code.slice(lastIndex, match.index));
+
+        const tokenType = Object.keys(match.groups).find((key) => match.groups[key] !== undefined);
+        html += `<span class="tok-${tokenType}">${escapeHtml(match[0])}</span>`;
+
+        lastIndex = match.index + match[0].length;
+    }
+
+    html += escapeHtml(code.slice(lastIndex));
+
+    // Keeps the overlay's scroll height matching the textarea's when the
+    // code ends with a trailing newline.
+    return html + '\n';
+}
+
+function updateHighlight() {
+    highlightCode.innerHTML = highlightSpinScript(textarea.value);
+}
+
+textarea.addEventListener('scroll', () => {
+    highlightPre.scrollTop = textarea.scrollTop;
+    highlightPre.scrollLeft = textarea.scrollLeft;
+});
+
+textarea.addEventListener('input', updateHighlight);
 
 document.addEventListener('DOMContentLoaded', () => {
     const savedCode = localStorage.getItem('spincode');
@@ -28,6 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
         errorInput.value = e.message;
     }
     }
+    updateHighlight();
 });
 
 textarea.addEventListener('change', () => {
@@ -81,7 +136,11 @@ function playSample(buffer, delayMs = 0) {
 
 playButton.addEventListener('click', async () => {
     errorInput.value = '';
+
     try {
+        if (isPlaying) {
+            return;
+        }
         const result = JSON.parse(SpinScript.Interpret(textarea.value));
         console.log(result);
 
@@ -93,6 +152,7 @@ playButton.addEventListener('click', async () => {
         console.log('Samples loaded (not playing yet):', buffers);
 
         isPlaying = true;
+        playButton.innerText = 'Stop';
         let cloneEvents = [...result.events];
 
         const startAudioTime = audioContext.currentTime;
@@ -119,6 +179,7 @@ playButton.addEventListener('click', async () => {
             });
 
             if (cloneEvents.length === 0 || !isPlaying) {
+                playButton.innerText = 'Play';
                 isPlaying = false;
                 return;
             }
@@ -130,6 +191,7 @@ playButton.addEventListener('click', async () => {
         }
         playNextEvents();
     } catch (e) {
-    errorInput.value = e.message;
+        errorInput.value = e.message;
+        playButton.innerText = 'Play';
     }
 });
