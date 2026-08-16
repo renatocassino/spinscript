@@ -434,7 +434,7 @@ public class Parser
             value = new SpinValue.NumberValue(double.Parse(Consume(TokenType.NUMBER).Value));
         } else if (Check(TokenType.REFERENCE))
         {
-            value = new SpinValue.StringValue(Consume(TokenType.REFERENCE).Value);
+            value = new SpinValue.StringValue($"@{Consume(TokenType.REFERENCE).Value}");
         }
         else if (Check(TokenType.BOOLEAN))
         {

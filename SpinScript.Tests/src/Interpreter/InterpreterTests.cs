@@ -18,10 +18,10 @@ public class InterpreterTests
 // O interpretador deduz o que baixar a partir daqui.
 // ===================================================================
 
-@kick   = "https://cdn.spin.dev/samples/kick_808.wav";
-@hihat  = "https://cdn.spin.dev/samples/hihat_closed.wav";
-@piano  = "https://cdn.spin.dev/instruments/grand_piano_c4.wav";
-@vinil  = "https://cdn.spin.dev/loops/vinyl_crackle_bnaz.mp3";
+@kick   = "https://d9olupt5igjta.cloudfront.net/samples/sample_files/804259/ef37106b83357433cc616296d69982a791a2fa10/mp3/_Kick_Sample.mp3";
+@hihat  = "https://d9olupt5igjta.cloudfront.net/samples/sample_files/30265/c795c3a46852c3fc410f213ab03a4decac519b37/mp3/_hat_1.mp3";
+// @piano  = "https://cdn.spin.dev/instruments/grand_piano_c4.wav";
+// @vinil  = "https://cdn.spin.dev/loops/vinyl_crackle_bnaz.mp3";
 
 // ===================================================================
 // CATEGORIA A — percussão (sample disparado numa grade de steps)
@@ -42,7 +42,7 @@ pattern @chimbal (sample=@hihat, grid=16) {
 // O som vem de um wav de piano, afinado por nota.
 // ===================================================================
 
-pattern @melodia (instrument=@piano, free=false) {
+// pattern @melodia (instrument=@piano, free=false) {
     // nota  duracao  inicio
     // E4       1/4      0
     // G4       1/4      1/4
@@ -50,7 +50,7 @@ pattern @melodia (instrument=@piano, free=false) {
     // B4       1/4      1
     // A4       1/4      5/4
     // G4       1/2      3/2
-};
+// };
 
 // ===================================================================
 // CATEGORIA C — faixa contínua (um mp3 inteiro tocando como camada)
@@ -72,9 +72,9 @@ loop @intro {
     play @groove (repeat=2); // a batida entra por cima
 }
 
-loop @verso (bars=8) {
+loop @verso {
     play @groove;
-    play @melodia;            // a melodia do piano entra no verso
+    // play @melodia;            // a melodia do piano entra no verso
 }
 
 // ===================================================================
@@ -83,8 +83,8 @@ loop @verso (bars=8) {
 
 song {
     play @intro;
-    play @verso (repeat=2);
-    play @groove (repeat=4);
+    // play @verso (repeat=2);
+    // play @groove (repeat=4);
 }
 """;
         var interpreter = new Interpreter(input);
@@ -92,6 +92,7 @@ song {
 
         Console.WriteLine($"{interpreter.interpretResult.Events.Count}");
 
+        Console.WriteLine("**********");
         foreach (var soundEvent in interpreter.interpretResult.Events)
         {
             Console.WriteLine($"Sample: {soundEvent.Sample}, Time: {soundEvent.Time}, Velocity: {soundEvent.Velocity}");

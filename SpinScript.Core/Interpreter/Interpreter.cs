@@ -142,18 +142,25 @@ public class Interpreter
                     repeatCount = parameters["repeat"].AsInt();
                 }
 
+                AstNode patternOrLoop;
+                if (isLoop)
+                {
+                    patternOrLoop = _loops[play.PatternName];
+                } else if (isPattern)
+                {
+                    patternOrLoop = _patterns[play.PatternName];
+                } else
+                {
+                    throw new InvalidOperationException($"PlayNode references unknown pattern or loop: {play.PatternName}");
+                }
+
                 for (var i = 0; i < repeatCount; i++)
                 {
                     Console.WriteLine($"Play: {play.PatternName} (repeat {i + 1}/{repeatCount})");
-                    if (isLoop)
+                    if (isLoop || isPattern)
                     {
-                        Console.WriteLine($"Play Loop: {play.PatternName}");
-                        InterpretStatement(_loops[play.PatternName]);
-                    }
-                    else if (isPattern)
-                    {
-                        Console.WriteLine($"Play Pattern: {play.PatternName}");
-                        InterpretStatement(_patterns[play.PatternName]);
+                        Console.WriteLine($"Play Loop/Pattern: {play.PatternName}");
+                        InterpretStatement(patternOrLoop);
                     }
                     else
                     {
@@ -176,41 +183,12 @@ public class Interpreter
 
         foreach (var statement in loop.Statements)
         {
-            // if (!hasParameterBars && statement is PlayNode play)
-            // {
-            //     if (_loops.ContainsKey(play.PatternName))
-            //     {
-            //         var loopNode = _loops[play.PatternName];
-            //         var loopBars = _songConfiguration.beatsPerBar;
-            //         var repeats = play.Parameters.ContainsKey("repeat") ? play.Parameters["repeat"].AsInt() : 1;
-
-            //         if (loopNode.Parameters.ContainsKey("bars"))
-            //         {
-            //             loopBars = loopNode.Parameters["bars"].AsInt();
-            //         } else
-            //         {
-            //             loopBars = _songConfiguration.beatsPerBar; // Default to beatsPerBar if not specified
-            //         }
-            //         totalBars = Math.Max(totalBars, loopBars * repeats);
-
-            //         Console.WriteLine($"Loop: {loop.Name} - Play Loop: {play.PatternName} - Bars: {loopBars}");
-            //     }
-            //     else if (_patterns.ContainsKey(play.PatternName))
-            //     {
-            //         totalBars = Math.Max(totalBars, 1);
-            //     }
-            // }
-
-            _currentTime = startTime;
+            // _currentTime = startTime;
             InterpretStatement(statement);
         }
 
-        _currentTime += (int)(_songConfiguration.BarDurationMs * (totalBars <= 0 ? 1 : totalBars));
         int duration = (int)bars * (int)_songConfiguration.BarDurationMs;
-        _currentTime = startTime + duration;
-
         return duration;
-
     }
 
     public int InterpretPattern(PatternNode pattern)
@@ -221,6 +199,21 @@ public class Interpreter
         var beatsPerBar = _songConfiguration.beatsPerBar;
 
         var sample = parameters.ContainsKey("sample") ? parameters["sample"].AsString() : null;
+        Console.WriteLine($">>>>>>>>>>Interpreting Pattern: {pattern.Name} - Sample: {sample} - BPM: {bpm} - BeatsPerBar: {beatsPerBar}");
+        // se sample começar com @, então é uma referência a um pattern, e não um sample direto
+        if (sample != null && sample.StartsWith("@"))
+        {
+            var referencedPatternName = sample.Substring(1);
+            if (_references.ContainsKey(referencedPatternName))
+            {
+                var referencedPattern = _references[referencedPatternName];
+                sample = referencedPattern.AsString();
+            }
+            else
+            {
+                throw new InvalidOperationException($"Referenced pattern '{referencedPatternName}' not found.");
+            }
+        }
         var grid = parameters.ContainsKey("grid") ? parameters["grid"].AsInt() : 16;
         var free = parameters.ContainsKey("free") ? parameters["free"].AsBoolean() : false;
         var beatMs = _songConfiguration.BeatDurationMs;
