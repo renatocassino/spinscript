@@ -134,4 +134,96 @@ song {
 
         Assert.Equal([0, 2000, 4000, 6000], times);
     }
+
+    [Fact]
+    public void PatternAfterNestedLoopStillStacksAtTheLoopStart()
+    {
+        // @bpm=120, beatsPerBar=4 (default) => 1 bar = 2000ms exactly.
+        // `intro` plays a nested loop (`kickLoop`, sequential — it advances
+        // time by its own 1 bar) followed by a bare pattern (`pad`, parallel
+        // — it must still land at intro's own start time, not wherever
+        // kickLoop left _currentTime).
+        var input = """
+@bpm = 120;
+@kick = "kick.wav";
+@pad = "pad.wav";
+
+pattern @kickBeat (sample=@kick, grid=16) {
+    1
+};
+
+pattern @padBeat (sample=@pad, grid=16) {
+    1
+};
+
+loop @kickLoop {
+    play @kickBeat;
+}
+
+loop @intro {
+    play @kickLoop;
+    play @padBeat;
+}
+
+song {
+    play @intro (repeat=2);
+}
+""";
+        var interpreter = new Interpreter(input);
+        interpreter.Interpret();
+
+        var times = interpreter.interpretResult.Events
+            .Select(e => (e.Sample, e.Time))
+            .ToList();
+
+        Assert.Equal(
+            [("kick.wav", 0.0), ("pad.wav", 0.0), ("kick.wav", 2000.0), ("pad.wav", 2000.0)],
+            times);
+    }
+
+    [Fact]
+    public void RepeatOnABarePatternPlaysItSequentiallyTheRightNumberOfTimes()
+    {
+        // @bpm=120, beatsPerBar=4 (default) => 1 bar = 2000ms exactly.
+        // `beat` (repeat=2) and `chimbal` (repeat=3) are parallel siblings:
+        // both start at groove's own start time, each repeating on its own
+        // bar-by-bar timeline. groove's own duration is dictated by the
+        // longer one (chimbal, 3 bars).
+        var input = """
+@bpm = 120;
+@kick = "kick.wav";
+@hihat = "hihat.wav";
+
+pattern @beat (sample=@kick, grid=16) {
+    1
+};
+
+pattern @chimbal (sample=@hihat, grid=16) {
+    1
+};
+
+loop @groove {
+    play @beat (repeat=2);
+    play @chimbal (repeat=3);
+}
+
+song {
+    play @groove;
+}
+""";
+        var interpreter = new Interpreter(input);
+        interpreter.Interpret();
+
+        var beatTimes = interpreter.interpretResult.Events
+            .Where(e => e.Sample == "kick.wav")
+            .Select(e => e.Time)
+            .ToList();
+        var chimbalTimes = interpreter.interpretResult.Events
+            .Where(e => e.Sample == "hihat.wav")
+            .Select(e => e.Time)
+            .ToList();
+
+        Assert.Equal([0.0, 2000.0], beatTimes);
+        Assert.Equal([0.0, 2000.0, 4000.0], chimbalTimes);
+    }
 }

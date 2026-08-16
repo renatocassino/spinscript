@@ -1,0 +1,326 @@
+import { LitElement, css, html } from 'lit';
+import { unsafeHTML } from 'lit/directives/unsafe-html.js';
+
+interface SpinScriptEvent {
+  time: number;
+  sample: string;
+}
+
+interface InterpretResult {
+  events: SpinScriptEvent[];
+}
+
+interface SpinScriptExports {
+  Parse(source: string): string;
+  Interpret(source: string): string;
+}
+
+const STORAGE_KEY = 'spincode';
+
+// Mirrors spinscript-vscode/syntaxes/spinscript.tmLanguage.json, in the same
+// precedence order (comments/strings/numbers first, punctuation last).
+const TOKEN_REGEX = new RegExp(
+  [
+    String.raw`(?<comment>/\*[\s\S]*?\*/|//.*)`,
+    String.raw`(?<string>"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')`,
+    String.raw`(?<number>\b[0-9]+(?:\.[0-9]+)?\b)`,
+    String.raw`(?<keyword>\b(?:song|loop|pattern|play)\b)`,
+    String.raw`(?<variable>@[A-Za-z][A-Za-z0-9_]*)`,
+    String.raw`(?<parameter>\b[A-Za-z_][A-Za-z0-9_]*\b(?=\s*=))`,
+  ].join('|'),
+  'g',
+);
+
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function highlightSpinScript(code: string): string {
+  let out = '';
+  let lastIndex = 0;
+
+  for (const match of code.matchAll(TOKEN_REGEX)) {
+    out += escapeHtml(code.slice(lastIndex, match.index));
+
+    const tokenType = Object.keys(match.groups!).find((key) => match.groups![key] !== undefined);
+    out += `<span class="tok-${tokenType}">${escapeHtml(match[0])}</span>`;
+
+    lastIndex = match.index! + match[0].length;
+  }
+
+  out += escapeHtml(code.slice(lastIndex));
+
+  // Keeps the overlay's scroll height matching the textarea's when the
+  // code ends with a trailing newline.
+  return out + '\n';
+}
+
+export class SpinScriptEditor extends LitElement {
+  static properties = {
+    code: { state: true },
+    error: { state: true },
+    isPlaying: { state: true },
+  };
+
+  declare code: string;
+  declare error: string;
+  declare isPlaying: boolean;
+
+  #spinscript: SpinScriptExports | null = null;
+  #audioContext: AudioContext | null = null;
+  #sampleBufferCache = new Map<string, AudioBuffer>();
+  #pendingEvents: SpinScriptEvent[] = [];
+
+  static styles = css`
+    :host {
+      display: block;
+      font-family: system-ui, sans-serif;
+    }
+
+    section {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      width: 100%;
+    }
+
+    .editor {
+      position: relative;
+      width: 100%;
+      height: 500px;
+      border: 1px solid #ccc;
+    }
+
+    .editor pre,
+    .editor textarea {
+      margin: 0;
+      padding: 0.5rem;
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      box-sizing: border-box;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 14px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      overflow: auto;
+      border: none;
+    }
+
+    #highlight {
+      color: #1f2328;
+      background: #fff;
+      pointer-events: none;
+    }
+
+    #spincode {
+      resize: none;
+      background: transparent;
+      color: transparent;
+      caret-color: #1f2328;
+    }
+
+    .tok-comment {
+      color: #6a737d;
+      font-style: italic;
+    }
+    .tok-string {
+      color: #22863a;
+    }
+    .tok-number {
+      color: #005cc5;
+    }
+    .tok-keyword {
+      color: #d73a49;
+      font-weight: bold;
+    }
+    .tok-variable {
+      color: #6f42c1;
+    }
+    .tok-parameter {
+      color: #e36209;
+    }
+
+    #error {
+      color: red;
+    }
+  `;
+
+  constructor() {
+    super();
+    this.code = '';
+    this.error = '';
+    this.isPlaying = false;
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    void this.#init();
+  }
+
+  async #init(): Promise<void> {
+    // public/wasm/_framework is populated by `npm run sync-wasm` from the
+    // SpinScript.Wasm build output, not part of the TS/Vite module graph. The
+    // URL is built from a variable (not a literal) so Vite's dependency
+    // scanner doesn't try to resolve it as a project file at build time.
+    const dotnetUrl = `${location.origin}/wasm/_framework/dotnet.js`;
+    const { dotnet } = await import(/* @vite-ignore */ dotnetUrl);
+    const { getAssemblyExports } = await dotnet.create();
+    const exports = await getAssemblyExports('SpinScript.Wasm.dll');
+    this.#spinscript = exports.SpinScript.Wasm.Exports as SpinScriptExports;
+
+    const savedCode = localStorage.getItem(STORAGE_KEY);
+    if (savedCode) {
+      this.code = savedCode;
+      this.#tryParse(savedCode);
+    }
+  }
+
+  #tryParse(source: string): void {
+    if (!this.#spinscript) return;
+
+    try {
+      this.#spinscript.Parse(source);
+      this.error = '';
+    } catch (e) {
+      this.error = (e as Error).message;
+    }
+  }
+
+  #handleInput(event: Event): void {
+    this.code = (event.target as HTMLTextAreaElement).value;
+  }
+
+  #handleChange(): void {
+    this.error = '';
+    localStorage.setItem(STORAGE_KEY, this.code);
+    this.#tryParse(this.code);
+  }
+
+  #handleScroll(event: Event): void {
+    const textarea = event.target as HTMLTextAreaElement;
+    const pre = this.shadowRoot!.getElementById('highlight')!;
+    pre.scrollTop = textarea.scrollTop;
+    pre.scrollLeft = textarea.scrollLeft;
+  }
+
+  #ensureAudioContext(): AudioContext {
+    if (!this.#audioContext) {
+      this.#audioContext = new AudioContext();
+    }
+    return this.#audioContext;
+  }
+
+  async #loadSample(url: string): Promise<AudioBuffer> {
+    const cached = this.#sampleBufferCache.get(url);
+    if (cached) return cached;
+
+    const audioContext = this.#ensureAudioContext();
+    const response = await fetch(url);
+    const arrayBuffer = await response.arrayBuffer();
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+    this.#sampleBufferCache.set(url, audioBuffer);
+    return audioBuffer;
+  }
+
+  async #loadSamples(urls: string[]): Promise<Map<string, AudioBuffer>> {
+    const buffers = await Promise.all(urls.map((url) => this.#loadSample(url)));
+    return new Map(urls.map((url, i) => [url, buffers[i]]));
+  }
+
+  // Schedules `buffer` to start playing `delayMs` milliseconds from now (uses
+  // the AudioContext clock, not setTimeout, so timing stays sample-accurate).
+  #playSample(buffer: AudioBuffer, delayMs = 0): AudioBufferSourceNode {
+    const audioContext = this.#ensureAudioContext();
+    const source = audioContext.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audioContext.destination);
+    source.start(audioContext.currentTime + delayMs / 1000);
+    return source;
+  }
+
+  async #handlePlay(): Promise<void> {
+    this.error = '';
+
+    if (this.isPlaying || !this.#spinscript) return;
+
+    try {
+      const result = JSON.parse(this.#spinscript.Interpret(this.code)) as InterpretResult;
+
+      const uniqueSamples = Object.keys(
+        result.events.reduce((accum, curr) => ({ ...accum, [curr.sample]: true }), {} as Record<string, boolean>),
+      );
+
+      const buffers = await this.#loadSamples(uniqueSamples);
+
+      this.isPlaying = true;
+      this.#pendingEvents = [...result.events];
+
+      const audioContext = this.#ensureAudioContext();
+      const startAudioTime = audioContext.currentTime;
+      const lookaheadMs = 300;
+      const schedulerIntervalMs = 25;
+
+      const playNextEvents = (): void => {
+        const now = audioContext.currentTime;
+
+        this.#pendingEvents = this.#pendingEvents.filter((event) => {
+          const scheduledAt = startAudioTime + event.time / 1000;
+          const timeToStart = (scheduledAt - now) * 1000;
+
+          if (timeToStart < lookaheadMs) {
+            const buffer = buffers.get(event.sample);
+            if (buffer) {
+              this.#playSample(buffer, Math.max(timeToStart, 0));
+            }
+            return false;
+          }
+
+          return true;
+        });
+
+        if (this.#pendingEvents.length === 0 || !this.isPlaying) {
+          this.isPlaying = false;
+          return;
+        }
+
+        setTimeout(() => {
+          if (!this.isPlaying) return;
+          playNextEvents();
+        }, schedulerIntervalMs);
+      };
+
+      playNextEvents();
+    } catch (e) {
+      this.error = (e as Error).message;
+      this.isPlaying = false;
+    }
+  }
+
+  override render() {
+    return html`
+      <section>
+        <h1>SpinScript WASM</h1>
+        <p>Type your SpinScript code below:</p>
+        <div class="editor">
+          <pre id="highlight" aria-hidden="true"><code>${unsafeHTML(highlightSpinScript(this.code))}</code></pre>
+          <textarea
+            id="spincode"
+            spellcheck="false"
+            .value=${this.code}
+            @input=${this.#handleInput}
+            @change=${this.#handleChange}
+            @scroll=${this.#handleScroll}
+          ></textarea>
+        </div>
+        <input readonly id="error" .value=${this.error} />
+        <button id="play" @click=${this.#handlePlay}>${this.isPlaying ? 'Stop' : 'Play'}</button>
+      </section>
+    `;
+  }
+}
+
+customElements.define('spinscript-editor', SpinScriptEditor);

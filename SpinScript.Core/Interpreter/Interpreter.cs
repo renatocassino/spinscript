@@ -164,6 +164,17 @@ public class Interpreter
                     {
                         Console.WriteLine($"Play Loop/Pattern: {play.PatternName}");
                         InterpretStatement(patternOrLoop);
+                        if (isPattern)
+                        {
+                            // A repeated bare pattern behaves like its own
+                            // 1-bar loop: each repetition lands one bar
+                            // after the previous one instead of every
+                            // repeat stacking on the exact same bar.
+                            // Loops already advance _currentTime on their
+                            // own each time through InterpretLoop, so this
+                            // only applies to plain patterns.
+                            _currentTime += (int)_songConfiguration.BarDurationMs;
+                        }
                     }
                     else
                     {
@@ -182,10 +193,28 @@ public class Interpreter
             ? loop.Parameters["bars"].AsInt()
             : (int?)null;
         var startTime = _currentTime;
+        var furthestTime = startTime;
 
         foreach (var statement in loop.Statements)
         {
+            if (!IsLoopReference(statement))
+            {
+                // Patterns (bare or via `play`) are parallel: they always
+                // layer on top of this loop's own start time, regardless of
+                // what a preceding sibling statement left _currentTime at.
+                _currentTime = startTime;
+            }
+            // Loops (bare or via `play`) are sequential: each one picks up
+            // from wherever the previous statement left _currentTime.
+
             InterpretStatement(statement);
+
+            // Track the furthest point any single statement reached, since
+            // parallel statements (e.g. two bare patterns with different
+            // `repeat` counts) can each advance _currentTime by a different
+            // amount; the loop's own duration must cover the longest one,
+            // not just whichever statement happened to run last.
+            furthestTime = Math.Max(furthestTime, _currentTime);
         }
 
         if (explicitBars.HasValue)
@@ -195,16 +224,30 @@ public class Interpreter
             // actually advanced _currentTime by.
             _currentTime = startTime + explicitBars.Value * (int)_songConfiguration.BarDurationMs;
         }
-        else if (_currentTime == startTime)
+        else if (furthestTime == startTime)
         {
-            // The body didn't advance time on its own (e.g. only bare
-            // pattern plays, which layer on the same bar instead of
-            // advancing) — default to a single bar.
+            // Nothing in the body advanced time on its own — default to a
+            // single bar.
             _currentTime = startTime + (int)_songConfiguration.BarDurationMs;
         }
-        // Otherwise, _currentTime already reflects exactly what the body
-        // consumed (e.g. nested loop plays advance it themselves) — leave
-        // it as is instead of adding a duration on top of that.
+        else
+        {
+            _currentTime = furthestTime;
+        }
+    }
+
+    // A statement counts as a "loop reference" (sequential) when it either
+    // is a loop body itself or is a `play` of something registered as a
+    // loop. Everything else (bare patterns, `play` of a pattern) is treated
+    // as parallel content that always starts at the enclosing loop's start.
+    private bool IsLoopReference(AstNode statement)
+    {
+        return statement switch
+        {
+            LoopNode => true,
+            PlayNode play => _loops.ContainsKey(play.PatternName),
+            _ => false,
+        };
     }
 
     public int InterpretPattern(PatternNode pattern)
