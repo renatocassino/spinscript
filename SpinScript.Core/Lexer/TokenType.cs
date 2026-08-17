@@ -2,8 +2,9 @@ namespace SpinScript.Lexer;
 
 public enum TokenType
 {
-    BOOLEAN,
-    STRING_LITERAL,
+    BOOLEAN, // true, false
+    FRACTION, // 1/4, 2/4, 1/2
+    STRING_LITERAL, // 'value' or "value"
     SEMICOLON,
     EQUALS,
     NUMBER,

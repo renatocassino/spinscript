@@ -25,6 +25,33 @@ public class TokenizerTests
     }
 
     [Fact]
+    public void TokenizeSimpleFraction()
+    {
+        var tokens = new Lexer("1/4; 1/5; 1; 3.2;").Tokenize();
+
+        Assert.Equal(TokenType.FRACTION, tokens[0].Type);
+        Assert.Equal("1/4", tokens[0].Value);
+
+        Assert.Equal(TokenType.SEMICOLON, tokens[1].Type);
+
+        Assert.Equal(TokenType.FRACTION, tokens[2].Type);
+        Assert.Equal("1/5", tokens[2].Value);
+
+        Assert.Equal(TokenType.SEMICOLON, tokens[3].Type);
+
+        Assert.Equal(TokenType.NUMBER, tokens[4].Type);
+        Assert.Equal("1", tokens[4].Value);
+
+        Assert.Equal(TokenType.SEMICOLON, tokens[5].Type);
+
+        Assert.Equal(TokenType.NUMBER, tokens[6].Type);
+        Assert.Equal("3.2", tokens[6].Value);
+
+        Assert.Equal(TokenType.SEMICOLON, tokens[7].Type);
+        Assert.Equal(TokenType.EOF, tokens[8].Type);
+    }
+
+    [Fact]
     public void TokenizeSimpleVarWithDoubleNumber()
     {
         var tokens = new Lexer("@volume = 0.1;").Tokenize();

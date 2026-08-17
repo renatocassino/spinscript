@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO.Pipelines;
 
 namespace SpinScript.Lexer;
 
@@ -192,15 +193,17 @@ public class Lexer
         var number = "";
         int startLine = _line;
         int startColumn = _column;
+        var kind = "integer";
         for (int i = _index; i < _input.Length; i++)
         {
-            if (int.TryParse(_input[i].ToString(), out int currentResult))
+            if (int.TryParse(_input[i].ToString(), out int _currentResult))
             {
-                number += currentResult.ToString(CultureInfo.InvariantCulture);
+                number += _input[i];
                 continue;
             }
 
             if (_input[i] == '.') {
+                kind = "double";
                 if (number.Contains('.')) {
                     throw new LexerException("The number is invalid", startLine, startColumn);
                 }
@@ -208,16 +211,43 @@ public class Lexer
                 number += '.';
                 continue;
             }
+
+            if (_input[i] == '/')
+            {
+                kind = "fraction";
+                if (number.Contains('/'))
+                {
+                    throw new LexerException("Time notes must have only one slash", startLine, startColumn);
+                }
+
+                number += '/';
+                continue;
+            }
             break;
         }
 
-        if (double.TryParse(number, NumberStyles.Float, CultureInfo.InvariantCulture, out var result))
+        switch (kind)
         {
-            _tokens.Add(new Token(TokenType.NUMBER, result.ToString(CultureInfo.InvariantCulture), startLine, startColumn));
-        }
-        else
-        {
-            throw new LexerException("Invalid conversion to number", startLine, startColumn);
+            case "integer":
+                if (int.TryParse(number, NumberStyles.Integer, CultureInfo.InvariantCulture, out var _numberInt))
+                {
+                    _tokens.Add(new Token(TokenType.NUMBER, _numberInt.ToString(CultureInfo.InvariantCulture), startLine, startColumn));
+                    break;
+                }
+                
+                throw new LexerException("Invalid conversion to integer", startLine, startColumn);
+            case "double":
+                if (double.TryParse(number, NumberStyles.Float, CultureInfo.InvariantCulture, out var result))
+                {
+                    _tokens.Add(new Token(TokenType.NUMBER, result.ToString(CultureInfo.InvariantCulture), startLine, startColumn));
+                    break;
+                }
+                throw new LexerException("Invalid conversion to double", startLine, startColumn);
+            case "fraction":
+                _tokens.Add(new Token(TokenType.FRACTION, number, startLine, startColumn));
+                break;
+            default:
+                throw new LexerException("Kind of number is invalid", startLine, startColumn);
         }
 
         _index += number.Length;

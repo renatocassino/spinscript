@@ -1,6 +1,13 @@
 import { LitElement, css, html } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 
+import '@awesome.me/webawesome/dist/components/card/card.js';
+import '@awesome.me/webawesome/dist/components/button/button.js';
+import '@awesome.me/webawesome/dist/components/callout/callout.js';
+import '@awesome.me/webawesome/dist/components/tag/tag.js';
+import '@awesome.me/webawesome/dist/components/spinner/spinner.js';
+import '@awesome.me/webawesome/dist/components/divider/divider.js';
+
 interface SpinScriptEvent {
   time: number;
   sample: string;
@@ -60,11 +67,13 @@ export class SpinScriptEditor extends LitElement {
     code: { state: true },
     error: { state: true },
     isPlaying: { state: true },
+    ready: { state: true },
   };
 
   declare code: string;
   declare error: string;
   declare isPlaying: boolean;
+  declare ready: boolean;
 
   #spinscript: SpinScriptExports | null = null;
   #audioContext: AudioContext | null = null;
@@ -74,33 +83,66 @@ export class SpinScriptEditor extends LitElement {
   static styles = css`
     :host {
       display: block;
-      font-family: system-ui, sans-serif;
+      font-family: var(--wa-font-family-body);
     }
 
-    section {
+    .editor-card {
+      width: 100%;
+    }
+
+    .editor-card::part(body) {
       display: flex;
       flex-direction: column;
-      gap: 1rem;
-      width: 100%;
+      gap: var(--wa-space-m);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--wa-space-m);
+    }
+
+    .card-header h1 {
+      margin: 0;
+      font-size: var(--wa-font-size-l);
+      font-family: var(--wa-font-family-heading);
+    }
+
+    .card-header p {
+      margin: var(--wa-space-3xs) 0 0;
+      color: var(--wa-color-text-quiet);
+      font-size: var(--wa-font-size-s);
+    }
+
+    .status-tag {
+      flex-shrink: 0;
+      gap: var(--wa-space-2xs);
+    }
+
+    .status-tag wa-spinner {
+      font-size: 0.85em;
     }
 
     .editor {
       position: relative;
       width: 100%;
       height: 500px;
-      border: 1px solid #ccc;
+      border: 1px solid var(--wa-color-surface-border);
+      border-radius: var(--wa-border-radius-m);
+      overflow: hidden;
     }
 
     .editor pre,
     .editor textarea {
       margin: 0;
-      padding: 0.5rem;
+      padding: var(--wa-space-s);
       position: absolute;
       inset: 0;
       width: 100%;
       height: 100%;
       box-sizing: border-box;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-family: var(--wa-font-family-code);
       font-size: 14px;
       line-height: 1.5;
       white-space: pre-wrap;
@@ -110,8 +152,8 @@ export class SpinScriptEditor extends LitElement {
     }
 
     #highlight {
-      color: #1f2328;
-      background: #fff;
+      color: var(--wa-color-text-normal);
+      background: var(--wa-color-surface-default);
       pointer-events: none;
     }
 
@@ -119,7 +161,7 @@ export class SpinScriptEditor extends LitElement {
       resize: none;
       background: transparent;
       color: transparent;
-      caret-color: #1f2328;
+      caret-color: var(--wa-color-text-normal);
     }
 
     .tok-comment {
@@ -143,8 +185,10 @@ export class SpinScriptEditor extends LitElement {
       color: #e36209;
     }
 
-    #error {
-      color: red;
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
     }
   `;
 
@@ -153,6 +197,7 @@ export class SpinScriptEditor extends LitElement {
     this.code = '';
     this.error = '';
     this.isPlaying = false;
+    this.ready = false;
   }
 
   override connectedCallback(): void {
@@ -170,6 +215,7 @@ export class SpinScriptEditor extends LitElement {
     const { getAssemblyExports } = await dotnet.create();
     const exports = await getAssemblyExports('SpinScript.Wasm.dll');
     this.#spinscript = exports.SpinScript.Wasm.Exports as SpinScriptExports;
+    this.ready = true;
 
     const savedCode = localStorage.getItem(STORAGE_KEY);
     if (savedCode) {
@@ -301,10 +347,21 @@ export class SpinScriptEditor extends LitElement {
   }
 
   override render() {
+    const statusVariant = this.isPlaying ? 'success' : this.ready ? 'neutral' : 'brand';
+    const statusLabel = this.isPlaying ? 'Playing' : this.ready ? 'Ready' : 'Loading WASM…';
+
     return html`
-      <section>
-        <h1>SpinScript WASM</h1>
-        <p>Type your SpinScript code below:</p>
+      <wa-card class="editor-card" appearance="outlined">
+        <div slot="header" class="card-header">
+          <div>
+            <h1>SpinScript WASM</h1>
+            <p>Type your SpinScript code below:</p>
+          </div>
+          <wa-tag class="status-tag" variant=${statusVariant} appearance="filled" size="small" pill>
+            ${!this.ready ? html`<wa-spinner></wa-spinner>` : null} ${statusLabel}
+          </wa-tag>
+        </div>
+
         <div class="editor">
           <pre id="highlight" aria-hidden="true"><code>${unsafeHTML(highlightSpinScript(this.code))}</code></pre>
           <textarea
@@ -316,9 +373,22 @@ export class SpinScriptEditor extends LitElement {
             @scroll=${this.#handleScroll}
           ></textarea>
         </div>
-        <input readonly id="error" .value=${this.error} />
-        <button id="play" @click=${this.#handlePlay}>${this.isPlaying ? 'Stop' : 'Play'}</button>
-      </section>
+
+        ${this.error
+          ? html`<wa-callout variant="danger" appearance="outlined" size="small">${this.error}</wa-callout>`
+          : null}
+
+        <div slot="footer" class="toolbar">
+          <wa-button
+            variant="brand"
+            appearance="filled"
+            ?disabled=${!this.ready}
+            @click=${this.#handlePlay}
+          >
+            ${this.isPlaying ? 'Stop' : 'Play'}
+          </wa-button>
+        </div>
+      </wa-card>
     `;
   }
 }
