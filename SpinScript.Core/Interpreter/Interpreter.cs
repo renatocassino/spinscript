@@ -1,5 +1,6 @@
 namespace SpinScript.Interpreter;
 
+using System.Diagnostics.Contracts;
 using SpinScript.Parser;
 using SpinScript.Parser.Ast;
 
@@ -283,20 +284,46 @@ public class Interpreter
         foreach (var note in melody.Notes)
         {
             var noteNotation = note.NoteName;
-            var startTimeNotation = fractionToTime(note.FractionStart);
-            var durationTimeNotation = startTimeNotation + fractionToTime(note.FractionDuration);
+            var startTimeNotation = FractionToTime(note.FractionStart);
+            var durationTimeNotation = startTimeNotation + FractionToTime(note.FractionDuration);
             // Add parameters in the future
 
             // Calc metrics here
-            Console.WriteLine($"Add note {noteNotation} - {startTimeNotation}-{durationTimeNotation}");
-            var melodyEvent = new MelodyEvent(sample ?? "unknown", startTimeNotation, startTimeNotation + durationTimeNotation, noteNotation);
+            var rate = CalcRate(noteNotation,"C4");
+            Console.WriteLine($"Add note {noteNotation} - {startTimeNotation}-{durationTimeNotation} {rate}");
+            var melodyEvent = new MelodyEvent(sample ?? "unknown", startTimeNotation, startTimeNotation + durationTimeNotation, noteNotation, rate);
             _interpretResult.Events.Add(melodyEvent);
         }
 
         return 0;
     }
 
-    public double fractionToTime(string fraction)
+    static public int NoteToMidi(string note)
+    {
+        var offsets = new Dictionary<char, int>
+        {
+            ['C'] = 0, ['D'] = 2, ['E'] = 4, ['F'] = 5,
+            ['G'] = 7, ['A'] = 9, ['B'] = 11,
+        };
+
+        int offset = offsets[note[0]];   // note[0] é char, dicionário é <char,int>
+        int octaveIndex = 1;              // onde começa o dígito da oitava
+
+        if (note.Length > 1 && note[1] == '#') { offset += 1; octaveIndex = 2; }
+        else if (note.Length > 1 && note[1] == 'b') { offset -= 1; octaveIndex = 2; }
+
+        int octave = int.Parse(note[octaveIndex..]);   // o resto é a oitava
+
+        return (octave + 1) * 12 + offset;
+    }
+
+    static public double CalcRate(string desiredNote, string rootNote)
+    {
+        int semitones = NoteToMidi(desiredNote) - NoteToMidi(rootNote);
+        return Math.Pow(2, semitones / 12.0);
+    }
+
+    public double FractionToTime(string fraction)
     {
         if (fraction.Contains("/"))
         {
