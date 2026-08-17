@@ -57,6 +57,7 @@ public class Parser
             {
                 case TokenType.REFERENCE: statements.Add(ParseReference()); break;
                 case TokenType.BEAT: statements.Add(ParseBeat()); break;
+                case TokenType.MELODY: statements.Add(ParseMelody()); break;
                 case TokenType.LOOP: statements.Add(ParseLoop()); break;
                 case TokenType.PLAY: statements.Add(ParsePlay()); break;
                 case TokenType.EOF: ParseEOF(); break;
@@ -238,32 +239,54 @@ public class Parser
         return new MelodyNode(beatName.Value, parameters, notes, beatName.Line, beatName.Column);
     }
 
+    /// <summary>
+    /// Consumes a time value that may be written either as a plain integer
+    /// (<c>0</c>, <c>1</c>) or as a fraction (<c>1/4</c>, <c>3/2</c>) —
+    /// both are valid note offsets/durations in a melody.
+    /// </summary>
+    private Token ConsumeNumberOrFraction()
+    {
+        return Check(TokenType.FRACTION) ? Consume(TokenType.FRACTION) : Consume(TokenType.NUMBER);
+    }
 
+    private Note ParseNote()
+    {
+        var noteValue = Consume(TokenType.NOTE);
+
+        var startAt = ConsumeNumberOrFraction();
+        var duration = ConsumeNumberOrFraction();
+        var parameters = ParseParameters();
+
+        return new Note(noteValue.Value, startAt.Value, duration.Value, parameters);
+    }
+
+    /// <summary>
+    /// Parses the comma-separated note list inside a melody's braces,
+    /// e.g. <c>E4 1/4 0, G4 1/4 1/4,</c>. Same shape as <see cref="ParseParams"/>:
+    /// a trailing comma right before the closing <c>}</c> is allowed.
+    /// </summary>
     private List<Note> ParseNotes()
     {
         var melody = new List<Note>();
 
-        while (!Check(TokenType.RBRACE) && !Check(TokenType.COMMA))
+        if (Check(TokenType.RBRACE))
         {
-            if (Check(TokenType.COMMA))
+            return melody;
+        }
+
+        melody.Add(ParseNote());
+
+        while (Match(TokenType.COMMA))
+        {
+            if (Check(TokenType.RBRACE))
             {
-                Consume(TokenType.COMMA);
+                break; // trailing comma
             }
-            var noteValue = Consume(TokenType.NOTE);
 
-            var startAt = Consume(TokenType.FRACTION); // TODO - Validate number too here
-            var duration = Consume(TokenType.FRACTION);
-            var parameters = ParseParameters();
-
-            melody.Add(new Note(noteValue.Value, ParseFraction(startAt.Value), ParseFraction(duration.Value), parameters));
+            melody.Add(ParseNote());
         }
 
         return melody;
-    }
-
-    private int ParseFraction(string input)
-    {
-        return 10;
     }
 
     /// <summary>
@@ -299,6 +322,7 @@ public class Parser
                 case TokenType.LOOP: statements.Add(ParseLoop()); break;
                 case TokenType.REFERENCE: statements.Add(ParseReference()); break;
                 case TokenType.BEAT: statements.Add(ParseBeat()); break;
+                case TokenType.MELODY: statements.Add(ParseMelody()); break;
                 case TokenType.PLAY: statements.Add(ParsePlay()); break;
                 case TokenType.EOF:
                     throw new ParserException($"Unexpected EOF inside loop body. Expected closing '}}'.", token.Line, token.Column);

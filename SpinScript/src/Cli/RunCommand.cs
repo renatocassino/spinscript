@@ -134,7 +134,7 @@ public sealed class RunCommand : Command<RunSettings>
     {
         var parameters = string.Join(", ", play.Parameters.Select(kv => $"{kv.Key}={kv.Value}"));
 
-        return $"[magenta]play[/] [yellow]@{Markup.Escape(play.beatName)}[/] " +
+        return $"[magenta]play[/] [yellow]@{Markup.Escape(play.PatternName)}[/] " +
                $"[grey]({Markup.Escape(parameters)})[/]";
     }
 

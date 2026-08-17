@@ -1,7 +1,12 @@
 namespace SpinScript.Interpreter;
 
-public record SoundEvent(string Sample, double Time, int Velocity);
-public record InterpretResult(List<SoundEvent> Events);
+public abstract record Event;
+
+public record SoundEvent(string Sample, double Time, int Velocity) : Event;
+
+public record MelodyEvent(string Sample, double Time, double Duration, string Note) : Event;
+
+public record InterpretResult(List<Event> Events);
 
 // ---------------------------------------------------------------------------
 // TIMING VOCABULARY

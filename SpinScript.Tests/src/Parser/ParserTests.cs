@@ -123,4 +123,30 @@ play @song1 (bpm=120, volume=80);
         Assert.Equal(16, beat2.Parameters["grid"].AsInt());
         Assert.Equal([3, 7, 11, 15], beat2.Steps);
     }
+
+    [Fact]
+    public void ParseMelodyWithoutTrailingCommaReturnsAllNotes()
+    {
+        var program = new Parser("melody @lead { E4 1/4 0, G4 1/4 1/4 };").Parse();
+
+        var melody = Assert.IsType<MelodyNode>(program.Statements[0]);
+
+        Assert.Equal("lead", melody.Name);
+        Assert.Equal(2, melody.Notes.Count);
+        Assert.Equal("E4", melody.Notes[0].NoteName);
+        Assert.Equal("G4", melody.Notes[1].NoteName);
+    }
+
+    [Fact]
+    public void ParseMelodyWithTrailingCommaReturnsAllNotes()
+    {
+        var program = new Parser("melody @lead { E4 1/4 0, G4 1/4 1/4, };").Parse();
+
+        var melody = Assert.IsType<MelodyNode>(program.Statements[0]);
+
+        Assert.Equal("lead", melody.Name);
+        Assert.Equal(2, melody.Notes.Count);
+        Assert.Equal("E4", melody.Notes[0].NoteName);
+        Assert.Equal("G4", melody.Notes[1].NoteName);
+    }
 }

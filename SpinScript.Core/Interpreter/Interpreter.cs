@@ -10,10 +10,11 @@ public class Interpreter
 
     private Dictionary<string, SpinValue> _references = new Dictionary<string, SpinValue>();
     private Dictionary<string, BeatNode> _beats = new Dictionary<string, BeatNode>();
+    private Dictionary<string, MelodyNode> _melodies = new Dictionary<string, MelodyNode>();
     private Dictionary<string, LoopNode> _loops = new Dictionary<string, LoopNode>();
     private SongNode? song;
 
-    private InterpretResult _interpretResult = new InterpretResult(new List<SoundEvent>());
+    private InterpretResult _interpretResult = new InterpretResult(new List<Event>());
 
     public InterpretResult interpretResult => _interpretResult;
 
@@ -82,6 +83,9 @@ public class Interpreter
                 case LoopNode loop:
                     _loops[loop.Name] = loop;
                     break;
+                case MelodyNode melody:
+                    _melodies[melody.Name] = melody;
+                    break;
                 case PlayNode play:
                     // Probably there are something wrong, because play exists only in loops and songs, so it should be handled in those cases.
                     throw new InvalidOperationException("PlayNode should not be at the top level.");
@@ -106,7 +110,7 @@ public class Interpreter
             throw new InvalidOperationException("No song node found.");
         }
 
-        _interpretResult = new InterpretResult(new List<SoundEvent>());
+        _interpretResult = new InterpretResult(new List<Event>());
 
         foreach (var statement in song.Statements)
         {
@@ -124,11 +128,11 @@ public class Interpreter
                 break;
             case BeatNode beat:
                 Console.WriteLine($"Beat: {beat.Name}");
-                // Return value (its bar duration) is intentionally discarded:
-                // sibling `play @beat;` statements inside the same loop
-                // body are meant to layer on the same bar (see InterpretLoop's
-                // "body didn't advance time" fallback), not play back to back.
                 InterpretBeat(beat);
+                break;
+            case MelodyNode melody:
+                Console.WriteLine($"Melody: {melody.Name}");
+                InterpretMelody(melody);
                 break;
             case LoopNode loop:
                 Console.WriteLine($"Loop: {loop.Name}");
@@ -136,7 +140,8 @@ public class Interpreter
                 break;
             case PlayNode play:
                 var isLoop = _loops.ContainsKey(play.PatternName);
-                var isPattern = _beats.ContainsKey(play.PatternName);
+                var isBeat = _beats.ContainsKey(play.PatternName);
+                var isMelody = _melodies.ContainsKey(play.PatternName);
                 var parameters = play.Parameters;
 
                 var repeatCount = 1;
@@ -149,9 +154,12 @@ public class Interpreter
                 if (isLoop)
                 {
                     beatOrLoop = _loops[play.PatternName];
-                } else if (isPattern)
+                } else if (isBeat)
                 {
                     beatOrLoop = _beats[play.PatternName];
+                } else if (isMelody)
+                {
+                    beatOrLoop = _melodies[play.PatternName];
                 } else
                 {
                     throw new InvalidOperationException($"PlayNode references unknown beat or loop: {play.PatternName}");
@@ -160,11 +168,11 @@ public class Interpreter
                 for (var i = 0; i < repeatCount; i++)
                 {
                     Console.WriteLine($"Play: {play.PatternName} (repeat {i + 1}/{repeatCount})");
-                    if (isLoop || isPattern)
+                    if (isLoop || isBeat || isMelody)
                     {
-                        Console.WriteLine($"Play Loop/Pattern: {play.PatternName}");
+                        Console.WriteLine($"Play Loop/Beat/Melody: {play.PatternName}");
                         InterpretStatement(beatOrLoop);
-                        if (isPattern)
+                        if (isBeat)
                         {
                             // A repeated bare pattern behaves like its own
                             // 1-bar loop: each repetition lands one bar
@@ -250,6 +258,63 @@ public class Interpreter
         };
     }
 
+    public int InterpretMelody(MelodyNode melody)
+    {
+        var parameters = melody.Parameters;
+
+        var sample = parameters.ContainsKey("sample") ? parameters["sample"].AsString() : null;
+        if (sample != null && sample.StartsWith("@"))
+        {
+            var referencedBeatName = sample.Substring(1);
+            if (_references.ContainsKey(referencedBeatName))
+            {
+                var referencedPattern = _references[referencedBeatName];
+                sample = referencedPattern.AsString();
+            }
+            else
+            {
+                throw new InvalidOperationException($"Referenced beat '{referencedBeatName}' not found.");
+            }
+        }
+
+        var barMs = _songConfiguration.BarDurationMs;
+        Console.WriteLine($"[DEBUG] - {barMs} - {melody.Notes}");
+
+        foreach (var note in melody.Notes)
+        {
+            var noteNotation = note.NoteName;
+            var startTimeNotation = fractionToTime(note.FractionStart);
+            var durationTimeNotation = startTimeNotation + fractionToTime(note.FractionDuration);
+            // Add parameters in the future
+
+            // Calc metrics here
+            Console.WriteLine($"Add note {noteNotation} - {startTimeNotation}-{durationTimeNotation}");
+            var melodyEvent = new MelodyEvent(sample ?? "unknown", startTimeNotation, startTimeNotation + durationTimeNotation, noteNotation);
+            _interpretResult.Events.Add(melodyEvent);
+        }
+
+        return 0;
+    }
+
+    public double fractionToTime(string fraction)
+    {
+        if (fraction.Contains("/"))
+        {
+            var nums = fraction.Split('/');
+
+            if (double.TryParse(nums[0], out double n1) && double.TryParse(nums[1], out double n2))
+            {
+                return n1 / n2 * _songConfiguration.BarDurationMs;
+            }
+        }
+
+        if (int.TryParse(fraction, out var f)) {
+            return _songConfiguration.BarDurationMs * f;
+        }
+
+        throw new InvalidOperationException($"Invalid time notation: '{fraction}'. Expected a fraction like '1/4' or a plain integer.");
+    }
+
     public int InterpretBeat(BeatNode beat)
     {
         var parameters = beat.Parameters;
@@ -274,15 +339,9 @@ public class Interpreter
             }
         }
         var grid = parameters.ContainsKey("grid") ? parameters["grid"].AsInt() : 16;
-        var free = parameters.ContainsKey("free") ? parameters["free"].AsBoolean() : false;
         var beatMs = _songConfiguration.BeatDurationMs;
         var barMs = _songConfiguration.BarDurationMs;
         var stepMs = barMs / grid;
-
-        if (free)
-        {
-            return 0; // In the furure
-        }
 
         Console.WriteLine($"Beat: {beat.Name} - Sample: {sample} - Grid: {grid} - Steps: {string.Join(", ", beat.Steps)} - BPM: {bpm}");
 

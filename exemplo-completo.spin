@@ -29,15 +29,15 @@ beat @chimbal (sample=@hihat, grid=16) {
 // O som vem de um wav de piano, afinado por nota.
 // ===================================================================
 
-// beat @melodia (instrument=@piano, free=false) {
-    // nota  duracao  inicio
-//     E4       1/4      0,
-//     G4       1/4      1/4,
-//     C5       1/2      1/2,
-//     B4       1/4      1,
-//     A4       1/4      5/4,
-//     G4       1/2      3/2,
-// };
+melody @melodia (instrument=@piano) {
+    // nota   inicio   duracao
+     E4       1/4      0,
+     G4       1        1/4,
+     C5       1/2      1/2,
+     B4       1/4      1,
+     A4       1/4      5/4,
+     G4       1/2      3/2,
+};
 
 // ===================================================================
 // CATEGORIA C — faixa contínua (um mp3 inteiro tocando como camada)

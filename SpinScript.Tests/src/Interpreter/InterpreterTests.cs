@@ -21,6 +21,7 @@ public class InterpreterTests
 @kick   = "https://d9olupt5igjta.cloudfront.net/samples/sample_files/804259/ef37106b83357433cc616296d69982a791a2fa10/mp3/_Kick_Sample.mp3";
 @hihat  = "https://d9olupt5igjta.cloudfront.net/samples/sample_files/30265/c795c3a46852c3fc410f213ab03a4decac519b37/mp3/_hat_1.mp3";
 // @piano  = "https://cdn.spin.dev/instruments/grand_piano_c4.wav";
+@piano = "https://cdn.freesound.org/previews/789/789144_24119-lq.mp3";
 // @vinil  = "https://cdn.spin.dev/loops/vinyl_crackle_bnaz.mp3";
 
 // ===================================================================
@@ -42,15 +43,15 @@ beat @chimbal (sample=@hihat, grid=16) {
 // O som vem de um wav de piano, afinado por nota.
 // ===================================================================
 
-// beat @melodia (instrument=@piano, free=false) {
-    // nota  duracao  inicio
-    // E4       1/4      0
-    // G4       1/4      1/4
-    // C5       1/2      1/2
-    // B4       1/4      1
-    // A4       1/4      5/4
-    // G4       1/2      3/2
-// };
+melody @melodia (sample=@piano) {
+    // nota     inicio   duracao
+    E4       1/1      1/4,
+    G4       1/4      1/4,
+    C5       1/2      1/2,
+    B4       1/4      1,
+    A4       1/4      5/4,
+    G4       1/2      3/2,
+};
 
 // ===================================================================
 // CATEGORIA C — faixa contínua (um mp3 inteiro tocando como camada)
@@ -70,11 +71,12 @@ loop @groove {
 
 loop @intro {
     play @groove (repeat=2); // a batida entra por cima
+    play @melodia;
 }
 
 loop @verso {
     play @groove;
-    // play @melodia;            // a melodia do piano entra no verso
+    play @melodia;            // a melodia do piano entra no verso
 }
 
 // ===================================================================
@@ -93,7 +95,7 @@ song {
         Console.WriteLine($"{interpreter.interpretResult.Events.Count}");
 
         Console.WriteLine("**********");
-        foreach (var soundEvent in interpreter.interpretResult.Events)
+        foreach (var soundEvent in interpreter.interpretResult.Events.OfType<SoundEvent>())
         {
             Console.WriteLine($"Sample: {soundEvent.Sample}, Time: {soundEvent.Time}, Velocity: {soundEvent.Velocity}");
         }
@@ -130,7 +132,7 @@ song {
         var interpreter = new Interpreter(input);
         interpreter.Interpret();
 
-        var times = interpreter.interpretResult.Events.Select(e => e.Time).ToList();
+        var times = interpreter.interpretResult.Events.OfType<SoundEvent>().Select(e => e.Time).ToList();
 
         Assert.Equal([0, 2000, 4000, 6000], times);
     }
@@ -173,6 +175,7 @@ song {
         interpreter.Interpret();
 
         var times = interpreter.interpretResult.Events
+            .OfType<SoundEvent>()
             .Select(e => (e.Sample, e.Time))
             .ToList();
 
@@ -215,10 +218,12 @@ song {
         interpreter.Interpret();
 
         var beatTimes = interpreter.interpretResult.Events
+            .OfType<SoundEvent>()
             .Where(e => e.Sample == "kick.wav")
             .Select(e => e.Time)
             .ToList();
         var chimbalTimes = interpreter.interpretResult.Events
+            .OfType<SoundEvent>()
             .Where(e => e.Sample == "hihat.wav")
             .Select(e => e.Time)
             .ToList();
