@@ -131,7 +131,7 @@ public class TokenizerTests
     public void CheckIfNoteWhenIsValid(string input)
     {
         var lexer = new Lexer("");
-        Assert.Equal(true, lexer.CheckIsNote(input));
+        Assert.True(lexer.CheckIsNote(input));
     }
 
     [Theory]
@@ -147,7 +147,7 @@ public class TokenizerTests
     public void CheckIfNoteWhenIsInvalid(string input)
     {
         var lexer = new Lexer("");
-        Assert.Equal(false, lexer.CheckIsNote(input));
+        Assert.False(lexer.CheckIsNote(input));
     }
 
     [Theory]
@@ -159,6 +159,32 @@ public class TokenizerTests
 
         Assert.Equal(TokenType.STRING_LITERAL, tokens[2].Type);
         Assert.Equal("", tokens[2].Value);
+    }
+
+    [Fact]
+    public void TokenizeNotes()
+    {
+        var tokens = new Lexer("C4 1/3 1/2; D#7 1/2 1/2").Tokenize();
+
+        Assert.Equal(TokenType.NOTE, tokens[0].Type);
+        Assert.Equal("C4", tokens[0].Value);
+
+        Assert.Equal(TokenType.FRACTION, tokens[1].Type);
+        Assert.Equal("1/3", tokens[1].Value);
+
+        Assert.Equal(TokenType.FRACTION, tokens[2].Type);
+        Assert.Equal("1/2", tokens[2].Value);
+
+        Assert.Equal(TokenType.SEMICOLON, tokens[3].Type);
+
+        Assert.Equal(TokenType.NOTE, tokens[4].Type);
+        Assert.Equal("D#7", tokens[4].Value);
+
+        Assert.Equal(TokenType.FRACTION, tokens[5].Type);
+        Assert.Equal("1/2", tokens[5].Value);
+
+        Assert.Equal(TokenType.FRACTION, tokens[6].Type);
+        Assert.Equal("1/2", tokens[6].Value);
     }
 
     [Fact]

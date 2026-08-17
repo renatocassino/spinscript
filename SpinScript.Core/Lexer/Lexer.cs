@@ -190,7 +190,8 @@ public class Lexer
 
         if (CheckIsNote(word))
         {
-            
+            _tokens.Add(new Token(TokenType.NOTE, word, startLine, startColumn));
+            return;
         }
 
         _tokens.Add(new Token(TokenType.IDENT, word, startLine, startColumn));
