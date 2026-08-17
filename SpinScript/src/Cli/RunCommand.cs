@@ -95,8 +95,8 @@ public sealed class RunCommand : Command<RunSettings>
                 parent.AddNode(DescribeAssignment(assignment));
                 break;
 
-            case PatternNode pattern:
-                parent.AddNode(DescribePattern(pattern));
+            case BeatNode beat:
+                parent.AddNode(DescribeBeat(beat));
                 break;
 
             case PlayNode play:
@@ -120,12 +120,12 @@ public sealed class RunCommand : Command<RunSettings>
         _ => Markup.Escape(value.ToString() ?? value.GetType().Name),
     };
 
-    private static string DescribePattern(PatternNode pattern)
+    private static string DescribeBeat(BeatNode beat)
     {
-        var parameters = string.Join(", ", pattern.Parameters.Select(kv => $"{kv.Key}={kv.Value}"));
-        var steps = string.Join(", ", pattern.Steps);
+        var parameters = string.Join(", ", beat.Parameters.Select(kv => $"{kv.Key}={kv.Value}"));
+        var steps = string.Join(", ", beat.Steps);
 
-        return $"[magenta]pattern[/] [yellow]{Markup.Escape(pattern.Name)}[/]" +
+        return $"[magenta]beat[/] [yellow]{Markup.Escape(beat.Name)}[/]" +
                $"[grey]({Markup.Escape(parameters)})[/] " +
                $"[grey]{{[/] [cyan]{Markup.Escape(steps)}[/] [grey]}}[/]";
     }
@@ -134,7 +134,7 @@ public sealed class RunCommand : Command<RunSettings>
     {
         var parameters = string.Join(", ", play.Parameters.Select(kv => $"{kv.Key}={kv.Value}"));
 
-        return $"[magenta]play[/] [yellow]@{Markup.Escape(play.PatternName)}[/] " +
+        return $"[magenta]play[/] [yellow]@{Markup.Escape(play.beatName)}[/] " +
                $"[grey]({Markup.Escape(parameters)})[/]";
     }
 

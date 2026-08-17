@@ -28,11 +28,11 @@ public class InterpreterTests
 // Sem altura, sem duração: o step liga, o sample toca.
 // ===================================================================
 
-pattern @beat (sample=@kick, grid=16) {
+beat @beat (sample=@kick, grid=16) {
     1, 5, 9, 13, 15
 };
 
-pattern @chimbal (sample=@hihat, grid=16) {
+beat @chimbal (sample=@hihat, grid=16) {
     3, 7, 11, 15
 };
 
@@ -42,7 +42,7 @@ pattern @chimbal (sample=@hihat, grid=16) {
 // O som vem de um wav de piano, afinado por nota.
 // ===================================================================
 
-// pattern @melodia (instrument=@piano, free=false) {
+// beat @melodia (instrument=@piano, free=false) {
     // nota  duracao  inicio
     // E4       1/4      0
     // G4       1/4      1/4
@@ -111,7 +111,7 @@ song {
 @bpm = 120;
 @kick = "kick.wav";
 
-pattern @beat (sample=@kick, grid=16) {
+beat @beat (sample=@kick, grid=16) {
     1
 };
 
@@ -148,11 +148,11 @@ song {
 @kick = "kick.wav";
 @pad = "pad.wav";
 
-pattern @kickBeat (sample=@kick, grid=16) {
+beat @kickBeat (sample=@kick, grid=16) {
     1
 };
 
-pattern @padBeat (sample=@pad, grid=16) {
+beat @padBeat (sample=@pad, grid=16) {
     1
 };
 
@@ -194,11 +194,11 @@ song {
 @kick = "kick.wav";
 @hihat = "hihat.wav";
 
-pattern @beat (sample=@kick, grid=16) {
+beat @beat (sample=@kick, grid=16) {
     1
 };
 
-pattern @chimbal (sample=@hihat, grid=16) {
+beat @chimbal (sample=@hihat, grid=16) {
     1
 };
 

@@ -86,8 +86,8 @@ play @song1 (bpm=120, volume=80);
     [Theory]
     [InlineData("loop @iterations {}", "iterations", 0)]
     [InlineData("loop @iterations { @bpm = 120; }", "iterations", 1)]
-    [InlineData("loop @iterations { pattern @kick (grid=16) { 9 }; }", "iterations", 1)]
-    [InlineData("loop @iterations { @bpm = 120; pattern @kick (grid=16) { 9 }; }", "iterations", 2)]
+    [InlineData("loop @iterations { beat @kick (grid=16) { 9 }; }", "iterations", 1)]
+    [InlineData("loop @iterations { @bpm = 120; beat @kick (grid=16) { 9 }; }", "iterations", 2)]
     public void ParseLoopReturnsLoopNodeWithExpectedStatements(string input, string expectedName, int expectedStatementCount)
     {
         var program = new Parser(input).Parse();
@@ -109,18 +109,18 @@ play @song1 (bpm=120, volume=80);
    [Fact]
     public void ParsePatternReturnNode()
     {
-        var program = new Parser("pattern @kick (grid=16) { 9 };\npattern @hats (grid=16) { 3, 7, 11, 15 };").Parse();
+        var program = new Parser("beat @kick (grid=16) { 9 };\nbeat @hats (grid=16) { 3, 7, 11, 15 };").Parse();
 
-        var pattern = Assert.IsType<PatternNode>(program.Statements[0]);
+        var beat = Assert.IsType<BeatNode>(program.Statements[0]);
 
-        Assert.Equal("kick", pattern.Name);
-        Assert.Equal(16, pattern.Parameters["grid"].AsInt());
-        Assert.Equal([9], pattern.Steps);
+        Assert.Equal("kick", beat.Name);
+        Assert.Equal(16, beat.Parameters["grid"].AsInt());
+        Assert.Equal([9], beat.Steps);
 
-        var pattern2 = Assert.IsType<PatternNode>(program.Statements[1]);
+        var beat2 = Assert.IsType<BeatNode>(program.Statements[1]);
 
-        Assert.Equal("hats", pattern2.Name);
-        Assert.Equal(16, pattern2.Parameters["grid"].AsInt());
-        Assert.Equal([3, 7, 11, 15], pattern2.Steps);
+        Assert.Equal("hats", beat2.Name);
+        Assert.Equal(16, beat2.Parameters["grid"].AsInt());
+        Assert.Equal([3, 7, 11, 15], beat2.Steps);
     }
 }

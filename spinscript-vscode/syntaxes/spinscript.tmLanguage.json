@@ -6,8 +6,10 @@
   "patterns": [
     { "include": "#comments" },
     { "include": "#strings" },
+    { "include": "#fractions" },
     { "include": "#numbers" },
     { "include": "#keywords" },
+    { "include": "#notes" },
     { "include": "#variables" },
     { "include": "#parameters" },
     { "include": "#punctuation" }
@@ -60,6 +62,16 @@
       ]
     },
 
+    "fractions": {
+      "comment": "Time notation like 1/4, 1/8 — must be tried before #numbers so the whole fraction is captured as one token instead of just the numerator.",
+      "patterns": [
+        {
+          "name": "constant.numeric.fraction.spin",
+          "match": "\\b[0-9]+/[0-9]+\\b"
+        }
+      ]
+    },
+
     "numbers": {
       "patterns": [
         {
@@ -73,13 +85,23 @@
       "patterns": [
         {
           "name": "keyword.control.spin",
-          "match": "\\b(song|loop|pattern|play)\\b"
+          "match": "\\b(song|loop|beat|play)\\b"
+        }
+      ]
+    },
+
+    "notes": {
+      "comment": "Musical notes: a letter A-G, optionally followed by a single octave digit (A4), an accidental (C#, Db), or both (Eb8, F#9). Mirrors Lexer.CheckIsNote.",
+      "patterns": [
+        {
+          "name": "constant.character.note.spin",
+          "match": "\\b[A-G](?:[#b][0-9]?|[0-9])?\\b"
         }
       ]
     },
 
     "variables": {
-      "comment": "@name references, inspired by LESS variables: used both where a name is declared (pattern @kick, loop @intro, @bpm = ...) and where it is referenced (play @kick;). The 'name' below scopes the whole @name match (including the sigil) as variable.other.readwrite, same trick the bundled LESS grammar uses, so the '@' picks up the variable color instead of staying in the default foreground.",
+      "comment": "@name references, inspired by LESS variables: used both where a name is declared (beat @kick, loop @intro, @bpm = ...) and where it is referenced (play @kick;). The 'name' below scopes the whole @name match (including the sigil) as variable.other.readwrite, same trick the bundled LESS grammar uses, so the '@' picks up the variable color instead of staying in the default foreground.",
       "patterns": [
         {
           "match": "(@)([A-Za-z][A-Za-z0-9_]*)",

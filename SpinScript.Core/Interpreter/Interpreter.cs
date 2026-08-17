@@ -9,7 +9,7 @@ public class Interpreter
     private readonly Parser _parser;
 
     private Dictionary<string, SpinValue> _references = new Dictionary<string, SpinValue>();
-    private Dictionary<string, PatternNode> _patterns = new Dictionary<string, PatternNode>();
+    private Dictionary<string, BeatNode> _beats = new Dictionary<string, BeatNode>();
     private Dictionary<string, LoopNode> _loops = new Dictionary<string, LoopNode>();
     private SongNode? song;
 
@@ -76,8 +76,8 @@ public class Interpreter
                 case AssignmentNode assignment:
                     _references[assignment.Name] = assignment.Value;
                     break;
-                case PatternNode pattern:
-                    _patterns[pattern.Name] = pattern;
+                case BeatNode beat:
+                    _beats[beat.Name] = beat;
                     break;
                 case LoopNode loop:
                     _loops[loop.Name] = loop;
@@ -122,13 +122,13 @@ public class Interpreter
                 Console.WriteLine($"Assignment: @{assignment.Name} = {assignment.Value}");
                 // _references[assignment.Name] = assignment.Value;
                 break;
-            case PatternNode pattern:
-                Console.WriteLine($"Pattern: {pattern.Name}");
+            case BeatNode beat:
+                Console.WriteLine($"Beat: {beat.Name}");
                 // Return value (its bar duration) is intentionally discarded:
-                // sibling `play @pattern;` statements inside the same loop
+                // sibling `play @beat;` statements inside the same loop
                 // body are meant to layer on the same bar (see InterpretLoop's
                 // "body didn't advance time" fallback), not play back to back.
-                InterpretPattern(pattern);
+                InterpretBeat(beat);
                 break;
             case LoopNode loop:
                 Console.WriteLine($"Loop: {loop.Name}");
@@ -136,7 +136,7 @@ public class Interpreter
                 break;
             case PlayNode play:
                 var isLoop = _loops.ContainsKey(play.PatternName);
-                var isPattern = _patterns.ContainsKey(play.PatternName);
+                var isPattern = _beats.ContainsKey(play.PatternName);
                 var parameters = play.Parameters;
 
                 var repeatCount = 1;
@@ -145,16 +145,16 @@ public class Interpreter
                     repeatCount = parameters["repeat"].AsInt();
                 }
 
-                AstNode patternOrLoop;
+                AstNode beatOrLoop;
                 if (isLoop)
                 {
-                    patternOrLoop = _loops[play.PatternName];
+                    beatOrLoop = _loops[play.PatternName];
                 } else if (isPattern)
                 {
-                    patternOrLoop = _patterns[play.PatternName];
+                    beatOrLoop = _beats[play.PatternName];
                 } else
                 {
-                    throw new InvalidOperationException($"PlayNode references unknown pattern or loop: {play.PatternName}");
+                    throw new InvalidOperationException($"PlayNode references unknown beat or loop: {play.PatternName}");
                 }
 
                 for (var i = 0; i < repeatCount; i++)
@@ -163,7 +163,7 @@ public class Interpreter
                     if (isLoop || isPattern)
                     {
                         Console.WriteLine($"Play Loop/Pattern: {play.PatternName}");
-                        InterpretStatement(patternOrLoop);
+                        InterpretStatement(beatOrLoop);
                         if (isPattern)
                         {
                             // A repeated bare pattern behaves like its own
@@ -250,27 +250,27 @@ public class Interpreter
         };
     }
 
-    public int InterpretPattern(PatternNode pattern)
+    public int InterpretBeat(BeatNode beat)
     {
-        var parameters = pattern.Parameters;
+        var parameters = beat.Parameters;
 
         var bpm = _songConfiguration.BPM;
         var beatsPerBar = _songConfiguration.beatsPerBar;
 
         var sample = parameters.ContainsKey("sample") ? parameters["sample"].AsString() : null;
-        Console.WriteLine($">>>>>>>>>>Interpreting Pattern: {pattern.Name} - Sample: {sample} - BPM: {bpm} - BeatsPerBar: {beatsPerBar}");
+        Console.WriteLine($">>>>>>>>>>Interpreting Pattern: {beat.Name} - Sample: {sample} - BPM: {bpm} - BeatsPerBar: {beatsPerBar}");
         // se sample começar com @, então é uma referência a um pattern, e não um sample direto
         if (sample != null && sample.StartsWith("@"))
         {
-            var referencedPatternName = sample.Substring(1);
-            if (_references.ContainsKey(referencedPatternName))
+            var referencedBeatName = sample.Substring(1);
+            if (_references.ContainsKey(referencedBeatName))
             {
-                var referencedPattern = _references[referencedPatternName];
+                var referencedPattern = _references[referencedBeatName];
                 sample = referencedPattern.AsString();
             }
             else
             {
-                throw new InvalidOperationException($"Referenced pattern '{referencedPatternName}' not found.");
+                throw new InvalidOperationException($"Referenced beat '{referencedBeatName}' not found.");
             }
         }
         var grid = parameters.ContainsKey("grid") ? parameters["grid"].AsInt() : 16;
@@ -284,9 +284,9 @@ public class Interpreter
             return 0; // In the furure
         }
 
-        Console.WriteLine($"Pattern: {pattern.Name} - Sample: {sample} - Grid: {grid} - Steps: {string.Join(", ", pattern.Steps)} - BPM: {bpm}");
+        Console.WriteLine($"Beat: {beat.Name} - Sample: {sample} - Grid: {grid} - Steps: {string.Join(", ", beat.Steps)} - BPM: {bpm}");
 
-        foreach (var statement in pattern.Steps.OrderBy(x => x))
+        foreach (var statement in beat.Steps.OrderBy(x => x))
         {
             var startTime = _currentTime + (int)(stepMs * (statement - 1));
             var soundEvent = new SoundEvent(sample ?? "unknown", startTime, 100);

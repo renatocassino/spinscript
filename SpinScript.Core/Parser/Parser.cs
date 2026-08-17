@@ -40,9 +40,9 @@ public class Parser
     /// resulting <see cref="ProgramNode"/>.
     /// </summary>
     /// <example>
-    /// <c>"@bpm = 129; pattern @kick (grid=16) { 9 }; play @kick;"</c>
+    /// <c>"@bpm = 129; beat @kick (grid=16) { 9 }; play @kick;"</c>
     /// validates and yields a <see cref="ProgramNode"/> with three
-    /// statements: an <see cref="AssignmentNode"/>, a <see cref="PatternNode"/>
+    /// statements: an <see cref="AssignmentNode"/>, a <see cref="BeatNode"/>
     /// and a <see cref="PlayNode"/>.
     /// </example>
     public ProgramNode Parse()
@@ -56,7 +56,7 @@ public class Parser
             switch (token.Type)
             {
                 case TokenType.REFERENCE: statements.Add(ParseReference()); break;
-                case TokenType.PATTERN: statements.Add(ParsePattern()); break;
+                case TokenType.BEAT: statements.Add(ParseBeat()); break;
                 case TokenType.LOOP: statements.Add(ParseLoop()); break;
                 case TokenType.PLAY: statements.Add(ParsePlay()); break;
                 case TokenType.EOF: ParseEOF(); break;
@@ -105,12 +105,12 @@ public class Parser
     public PlayNode ParsePlay()
     {
         Consume(TokenType.PLAY);
-        var patternRef = Consume(TokenType.REFERENCE);
+        var beatRef = Consume(TokenType.REFERENCE);
         var parameters = ParseParameters();
 
         Consume(TokenType.SEMICOLON);
 
-        return new PlayNode(patternRef.Value, parameters, patternRef.Line, patternRef.Column);
+        return new PlayNode(beatRef.Value, parameters, beatRef.Line, beatRef.Column);
     }
 
     /// <summary>
@@ -192,32 +192,56 @@ public class Parser
     }
 
     /// <summary>
-    /// Parses a pattern declaration:
-    /// <c>pattern @name (param=value, ...)? { step, step, ... };</c>.
+    /// Parses a beat declaration:
+    /// <c>beat @name (param=value, ...)? { step, step, ... };</c>.
     /// The parenthesized parameter list is optional (see <see cref="ParseParams"/>);
     /// the step list is a comma-separated sequence of numbers enclosed in
     /// braces (see <see cref="ParseSteps"/>).
     /// </summary>
     /// <example>
-    /// <c>"pattern @kick (grid=16, sample=@kick, free, free=true) { 1, 5, 9, 13 };"</c>
-    /// → <c>PatternNode</c> with <c>Name == "kick"</c>,
+    /// <c>"beat @kick (grid=16, sample=@kick, free, free=true) { 1, 5, 9, 13 };"</c>
+    /// → <c>BeatNode</c> with <c>Name == "kick"</c>,
     /// <c>Parameters == { grid: "16", sample: "kick", free: "true" }</c>
     /// and <c>Steps == ["1", "5", "9", "13"]</c>.<br/>
-    /// <c>"pattern @hats { };"</c> → same node shape with no parameters and
+    /// <c>"beat @hats { };"</c> → same node shape with no parameters and
     /// an empty step list.
     /// </example>
-    public AstNode ParsePattern()
+    public AstNode ParseBeat()
     {
-        Consume(TokenType.PATTERN);
-        var patternName = Consume(TokenType.REFERENCE);
+        Consume(TokenType.BEAT);
+        var beatName = Consume(TokenType.REFERENCE);
         var parameters = ParseParams();
 
         Consume(TokenType.LBRACE);
+
         var steps = ParseSteps();
+
         Consume(TokenType.RBRACE);
         Consume(TokenType.SEMICOLON);
 
-        return new PatternNode(patternName.Value, parameters, steps, patternName.Line, patternName.Column);
+        return new BeatNode(beatName.Value, parameters, steps, beatName.Line, beatName.Column);
+    }
+
+    private StepOrMelody.MelodyValue ParseMelody()
+    {
+        var melody = new List<Note>();
+
+        while (!Check(TokenType.RBRACE))
+        {
+            var noteValue = Consume(TokenType.NOTE);
+
+            var startAt = Consume(TokenType.FRACTION); // TODO - Validate number too here
+            var duration = Consume(TokenType.FRACTION);
+            var parameters = ParseParameters();
+
+            melody.Add(new Note(noteValue.Value, ParseFraction(startAt.Value), ParseFraction(duration.Value), parameters));
+        }
+        return new StepOrMelody.MelodyValue(melody);
+    }
+
+    private int ParseFraction(string input)
+    {
+        return 10;
     }
 
     /// <summary>
@@ -252,7 +276,7 @@ public class Parser
             {
                 case TokenType.LOOP: statements.Add(ParseLoop()); break;
                 case TokenType.REFERENCE: statements.Add(ParseReference()); break;
-                case TokenType.PATTERN: statements.Add(ParsePattern()); break;
+                case TokenType.BEAT: statements.Add(ParseBeat()); break;
                 case TokenType.PLAY: statements.Add(ParsePlay()); break;
                 case TokenType.EOF:
                     throw new ParserException($"Unexpected EOF inside loop body. Expected closing '}}'.", token.Line, token.Column);
@@ -345,7 +369,7 @@ public class Parser
     /// they wrap a comma-separated, variable-length list of key=value pairs
     /// (see <see cref="ParseParam"/>). Functionally identical to
     /// <see cref="ParseParameters"/>; used by <see cref="ParseSong"/>,
-    /// <see cref="ParsePattern"/> and <see cref="ParseLoop"/>.
+    /// <see cref="ParseBeat"/> and <see cref="ParseLoop"/>.
     /// </summary>
     /// <example>
     /// <c>"(grid=16, sample=@kick, free, free=true)"</c> →

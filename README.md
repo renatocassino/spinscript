@@ -17,11 +17,11 @@ sudo dotnet workload install wasm-tools
 A linguagem tem três níveis. Entender a hierarquia é entender a
 linguagem inteira.
 
-**pattern** é o que soa e onde soa. É a fileira de quadradinhos do FL
-Studio: uma sequência de posições onde um som dispara. Um pattern conhece
+**beat** é o que soa e onde soa. É a fileira de quadradinhos do FL
+Studio: uma sequência de posições onde um som dispara. Um beat conhece
 o próprio som (um kick, um chimbal) e a própria resolução.
 
-**loop** empilha patterns e define quanto tempo dura. Vários patterns
+**loop** empilha beats e define quanto tempo dura. Vários beats
 dentro do mesmo loop tocam ao mesmo tempo (kick, caixa e chimbal juntos
 formam um groove). O loop é medido em compassos.
 
@@ -29,7 +29,7 @@ formam um groove). O loop é medido em compassos.
 depois duas estrofes, depois o refrão de novo. A estrutura macro da
 música vive aqui.
 
-Resumindo o fluxo: patterns são as camadas, loops as agrupam em trechos,
+Resumindo o fluxo: beats são as camadas, loops as agrupam em trechos,
 o song monta a faixa com esses trechos.
 
 ---
@@ -38,7 +38,7 @@ o song monta a faixa com esses trechos.
 
 São duas medidas diferentes e perpendiculares.
 
-**grid** é a resolução de um pattern: em quantos passos (steps) o
+**grid** é a resolução de um beat: em quantos passos (steps) o
 compasso é fatiado. `grid=16` significa dezesseis quadradinhos onde você
 pode colocar um som. É exatamente a fileira de steps do FL Studio. Mexer
 no grid muda a finura das batidas, não a duração.
@@ -58,8 +58,8 @@ Então cada step de um `grid=16` dura um quarto de batida. Com o BPM, isso
 vira tempo real: a 120 BPM cada batida dura 0,5s, logo cada step dura
 0,125s. Regra de três direta a partir do BPM.
 
-Quando um pattern é mais curto que o loop que o contém, ele se repete
-para preencher. Um pattern de 1 bar dentro de um loop de `bars=4` toca
+Quando um beat é mais curto que o loop que o contém, ele se repete
+para preencher. Um beat de 1 bar dentro de um loop de `bars=4` toca
 quatro vezes seguidas. É o comportamento de qualquer drum machine: o
 groove de um compasso loopa para encher o trecho.
 
@@ -84,17 +84,17 @@ underscore: `@bpm`, `@main_groove`, `@drop2` são válidos; `@2fast` e
 
 ---
 
-## Patterns
+## beats
 
-Um pattern declara um som e as posições onde ele dispara. Os parâmetros
+Um beat declara um som e as posições onde ele dispara. Os parâmetros
 vão entre parênteses; o conteúdo, entre chaves.
 
 Percussão usa a grade de steps. As posições são só os números dos steps
 onde o som toca:
 
 ```
-pattern @kick (sound=kick, grid=16) { 9 }
-pattern @hats (sound=hihat, grid=16) { 3, 7, 11, 15 }
+beat @kick (sound=kick, grid=16) { 9 }
+beat @hats (sound=hihat, grid=16) { 3, 7, 11, 15 }
 ```
 
 O `kick` acima dispara só no step 9. O `hats` dispara nos steps 3, 7, 11
@@ -107,7 +107,7 @@ começa, medidos em batidas. (Essa parte da sintaxe ainda vai ser
 refinada quando entrarmos em notas e acordes de verdade.)
 
 ```
-pattern @baixo (sound=bass, free) {
+beat @baixo (sound=bass, free) {
   // nota  duracao  inicio(em batidas)
   C2       1        0
   G2       1        2
@@ -122,7 +122,7 @@ steps).
 
 ## Loops
 
-Um loop agrupa patterns e define a duração em bars. Todo pattern tocado
+Um loop agrupa beats e define a duração em bars. Todo beat tocado
 dentro dele soa simultaneamente.
 
 ```
@@ -133,7 +133,7 @@ loop @groove (bars=1) {
 }
 ```
 
-Os três patterns tocam empilhados: é assim que se montam camadas. Não
+Os três beats tocam empilhados: é assim que se montam camadas. Não
 existe sintaxe especial para "tocar junto"; basta pôr no mesmo loop.
 
 O `play` aceita modificadores entre parênteses, no mesmo estilo dos
@@ -175,7 +175,7 @@ Uma convenção única em toda a linguagem, sem exceção:
 
 - **parênteses `( )`** cercam parâmetros e modificadores, tanto na
   definição (`loop x (bars=1)`) quanto no uso (`play @x (repeat=2)`).
-- **chaves `{ }`** cercam corpo: o conteúdo de um pattern, de um loop, de
+- **chaves `{ }`** cercam corpo: o conteúdo de um beat, de um loop, de
   um song.
 - **ponto e vírgula `;`** encerra cada instrução simples (variável,
   play).
@@ -208,9 +208,9 @@ contratempos.
 ```
 @bpm = 75;
 
-pattern @kick  (sound=kick,  grid=16) { 9 }
-pattern @snare (sound=snare, grid=16) { 9 }
-pattern @hats  (sound=hihat, grid=16) { 3, 7, 11, 15 }
+beat @kick  (sound=kick,  grid=16) { 9 }
+beat @snare (sound=snare, grid=16) { 9 }
+beat @hats  (sound=hihat, grid=16) { 3, 7, 11, 15 }
 
 loop groove (bars=1) {
   play @kick;
@@ -246,9 +246,9 @@ Note dois pontos que esse exemplo assume e que valem confirmar como
 regra:
 
 1. Um loop pode dar `play` em **outro loop** (aqui `refrao` toca
-   `@groove`), não só em patterns. Isso é o que elimina a repetição de
+   `@groove`), não só em beats. Isso é o que elimina a repetição de
    escrever kick/snare/hats em cada trecho.
-2. O pattern de 1 bar dentro do loop de 4 bars se **repete** para
+2. O beat de 1 bar dentro do loop de 4 bars se **repete** para
    preencher os quatro compassos.
 
 ---
@@ -256,10 +256,10 @@ regra:
 ## Vocabulário rápido
 
 - **step**: um quadradinho da grade; a menor posição onde um som dispara.
-- **grid**: quantos steps cabem no compasso de um pattern (a resolução).
+- **grid**: quantos steps cabem no compasso de um beat (a resolução).
 - **bar / compasso**: quatro batidas; a unidade de duração de um loop.
 - **bpm**: batidas por minuto; define quanto tempo real dura cada batida.
-- **pattern**: um som e suas posições.
-- **loop**: patterns empilhados, com duração em bars.
+- **beat**: um som e suas posições.
+- **loop**: beats empilhados, com duração em bars.
 - **song**: a sequência de loops que forma a faixa.
 - **intro / outro**: o trecho de abertura e o de encerramento da música.

@@ -30,8 +30,14 @@ const TOKEN_REGEX = new RegExp(
   [
     String.raw`(?<comment>/\*[\s\S]*?\*/|//.*)`,
     String.raw`(?<string>"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')`,
+    // Must come before `number` so a fraction like `1/4` is captured whole
+    // instead of just matching its numerator.
+    String.raw`(?<fraction>\b[0-9]+/[0-9]+\b)`,
     String.raw`(?<number>\b[0-9]+(?:\.[0-9]+)?\b)`,
-    String.raw`(?<keyword>\b(?:song|loop|pattern|play)\b)`,
+    String.raw`(?<keyword>\b(?:song|loop|beat|play)\b)`,
+    // A letter A-G, optionally followed by an octave digit (A4), an
+    // accidental (C#, Db), or both (Eb8, F#9). Mirrors Lexer.CheckIsNote.
+    String.raw`(?<note>\b[A-G](?:[#b][0-9]?|[0-9])?\b)`,
     String.raw`(?<variable>@[A-Za-z][A-Za-z0-9_]*)`,
     String.raw`(?<parameter>\b[A-Za-z_][A-Za-z0-9_]*\b(?=\s*=))`,
   ].join('|'),
@@ -171,12 +177,16 @@ export class SpinScriptEditor extends LitElement {
     .tok-string {
       color: #22863a;
     }
-    .tok-number {
+    .tok-number,
+    .tok-fraction {
       color: #005cc5;
     }
     .tok-keyword {
       color: #d73a49;
       font-weight: bold;
+    }
+    .tok-note {
+      color: #0086b3;
     }
     .tok-variable {
       color: #6f42c1;

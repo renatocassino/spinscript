@@ -1,10 +1,10 @@
 @bpm = 129;
 
-pattern @kick(grid=16) {
+beat @kick(grid=16) {
     3, 6, 9, 12
 };
 
-pattern @bass(grid=16) {
+beat @bass(grid=16) {
     3, 5, 11
 };
 

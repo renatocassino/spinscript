@@ -331,12 +331,12 @@ public class TokenizerTests
     }
 
     [Fact]
-    public void TokenizePatternSintax()
+    public void TokenizeBeatSintax()
     {
-        var tokens = new Lexer("pattern @kick (grid=16) { 9 };\npattern hats (sound=hihat, grid=16) { 3, 7, 11, 15 };").Tokenize();
+        var tokens = new Lexer("beat @kick (grid=16) { 9 };\nbeat hats (sound=hihat, grid=16) { 3, 7, 11, 15 };").Tokenize();
 
-        Assert.Equal(TokenType.PATTERN, tokens[0].Type);
-        Assert.Equal("pattern", tokens[0].Value);
+        Assert.Equal(TokenType.BEAT, tokens[0].Type);
+        Assert.Equal("beat", tokens[0].Value);
 
         Assert.Equal(TokenType.REFERENCE, tokens[1].Type);
         Assert.Equal("kick", tokens[1].Value);
@@ -368,8 +368,8 @@ public class TokenizerTests
         Assert.Equal(TokenType.SEMICOLON, tokens[10].Type);
         Assert.Equal(";", tokens[10].Value);
 
-        Assert.Equal(TokenType.PATTERN, tokens[11].Type);
-        Assert.Equal("pattern", tokens[11].Value);
+        Assert.Equal(TokenType.BEAT, tokens[11].Type);
+        Assert.Equal("beat", tokens[11].Value);
 
         Assert.Equal(TokenType.IDENT, tokens[12].Type);
         Assert.Equal("hats", tokens[12].Value);
@@ -828,11 +828,11 @@ public class TokenizerTests
     }
 
     [Fact]
-    public void TokenizeBooleanInsidePatternParameter()
+    public void TokenizeBooleanInsideBeatParameter()
     {
-        var tokens = new Lexer("pattern @kick (muted=true) { 9 };").Tokenize();
+        var tokens = new Lexer("beat @kick (muted=true) { 9 };").Tokenize();
 
-        Assert.Equal(TokenType.PATTERN, tokens[0].Type);
+        Assert.Equal(TokenType.BEAT, tokens[0].Type);
         Assert.Equal(TokenType.REFERENCE, tokens[1].Type);
         Assert.Equal(TokenType.LPAREN, tokens[2].Type);
         Assert.Equal(TokenType.IDENT, tokens[3].Type);

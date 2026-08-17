@@ -26,7 +26,7 @@ public sealed class AstNodeJsonConverter : JsonConverter<AstNode>
                 JsonSerializer.Serialize(writer, assignment.Value, options);
                 WriteLocation(writer, assignment.Line, assignment.Column);
                 break;
-            case PatternNode pattern:
+            case BeatNode pattern:
                 writer.WriteString("type", "pattern");
                 writer.WriteString("name", pattern.Name);
                 WriteParameters(writer, "parameters", pattern.Parameters, options);

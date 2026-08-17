@@ -10,10 +10,10 @@ Baseado no README atual vs. o que já existe em `SpinScript/src/Lexer` e
       `default` do switch e lança `LexerException`. Precisa suportar
       ponto decimal (e decidir se `NUMBER` vira um único tipo com valor
       fracionário, ou se cria um `FLOAT`/`DECIMAL` separado).
-- [ ] **Keyword `free`.** Usada nos patterns melódicos:
-      `pattern @baixo (sound=bass, free) { ... }` (seção "Patterns"). Não
+- [ ] **Keyword `free`.** Usada nos beats melódicos:
+      `beat @baixo (sound=bass, free) { ... }` (seção "beats"). Não
       está no dicionário `Keywords` do `Lexer.cs` — hoje viraria `IDENT`.
-- [ ] **Corpo de pattern melódico.** As linhas `C2  1  0` (nota, duração,
+- [ ] **Corpo de beat melódico.** As linhas `C2  1  0` (nota, duração,
       início em batidas) misturam letras+dígito (`C2`) com números
       separados por espaço, sem vírgula — bem diferente do corpo
       percussivo (`{ 3, 7, 11, 15 }`). Hoje `C2` tokeniza como `IDENT`
@@ -44,18 +44,18 @@ Baseado no README atual vs. o que já existe em `SpinScript/src/Lexer` e
       `ParseLoop`, sem nome nem parênteses (é singleton por arquivo?
       vale confirmar essa regra).
 - [ ] **Ligar os três no dispatcher `Parse()`.** O `switch` em
-      `Parser.cs` só tem `case`s pra `REFERENCE`, `PATTERN` e `EOF` — os
+      `Parser.cs` só tem `case`s pra `REFERENCE`, `beat` e `EOF` — os
       tokens `LOOP`, `PLAY` e `SONG` caem no `default` e explodem
       `ParserException`.
-- [ ] **Corpo melódico do pattern (`free`).** `ParseSteps()` só lê
+- [ ] **Corpo melódico do beat (`free`).** `ParseSteps()` só lê
       `NUMBER` separados por vírgula — não cobre o formato
-      `NOTA DURACAO INICIO` por linha usado quando o pattern é `free`.
+      `NOTA DURACAO INICIO` por linha usado quando o beat é `free`.
       Depende de decimais no lexer (duração/início podem ser fracionários
       dependendo do exemplo) e de `free` virar keyword primeiro.
-- [ ] **Padronizar `@` em declaração de pattern/loop.** O README se
-      contradiz: seção "Patterns" mostra `pattern @kick (...)`, mas
-      "Exemplo completo" mostra `pattern kick (...)` (sem `@`) — mesma
-      coisa pra `loop`. `ParsePattern` hoje exige `Consume(REFERENCE)`
+- [ ] **Padronizar `@` em declaração de beat/loop.** O README se
+      contradiz: seção "beats" mostra `beat @kick (...)`, mas
+      "Exemplo completo" mostra `beat kick (...)` (sem `@`) — mesma
+      coisa pra `loop`. `Parsebeat` hoje exige `Consume(REFERENCE)`
       (ou seja, exige `@`). Decidir qual é a regra oficial e atualizar
       README + parser pra baterem.
 - [ ] (Cleanup) `public int index` em `Parser.cs` dispara aviso do
