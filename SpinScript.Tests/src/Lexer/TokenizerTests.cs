@@ -115,6 +115,42 @@ public class TokenizerTests
     }
 
     [Theory]
+    [InlineData("A4")]
+    [InlineData("B")]
+    [InlineData("C2")]
+    [InlineData("D1")]
+    [InlineData("E")]
+    [InlineData("F5")]
+    [InlineData("A#6")]
+    [InlineData("C#")]
+    [InlineData("Eb8")]
+    [InlineData("F#9")]
+    [InlineData("D#0")]
+    [InlineData("Db")]
+    [InlineData("Db1")]
+    public void CheckIfNoteWhenIsValid(string input)
+    {
+        var lexer = new Lexer("");
+        Assert.Equal(true, lexer.CheckIsNote(input));
+    }
+
+    [Theory]
+    [InlineData("H")]
+    [InlineData("Bw")]
+    [InlineData("CD")]
+    [InlineData("a#")]
+    [InlineData("b#")]
+    [InlineData("E#-10")]
+    [InlineData("E#11")]
+    [InlineData("Hb")]
+    [InlineData("Zb6")]
+    public void CheckIfNoteWhenIsInvalid(string input)
+    {
+        var lexer = new Lexer("");
+        Assert.Equal(false, lexer.CheckIsNote(input));
+    }
+
+    [Theory]
     [InlineData("@x = \"\";")]
     [InlineData("@x = '';")]
     public void TokenizeEmptyStringReturnsEmptyValue(string input)

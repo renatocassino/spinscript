@@ -30,6 +30,9 @@ public class Lexer
         ["false"] = TokenType.BOOLEAN,
     };
 
+    private static readonly HashSet<char> NoteLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
+    private static readonly HashSet<char> OctaveDigits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+
 
     public List<Token> Tokenize()
     {
@@ -165,7 +168,7 @@ public class Lexer
         _column++;
 
         while (_index < _input.Length &&
-            (char.IsLetterOrDigit(_input[_index]) || _input[_index] == '_'))
+            (char.IsLetterOrDigit(_input[_index]) || _input[_index] == '_' || _input[_index] == '#'))
         {
             _index++;
             _column++;
@@ -185,7 +188,43 @@ public class Lexer
             return;
         }
 
+        if (CheckIsNote(word))
+        {
+            
+        }
+
         _tokens.Add(new Token(TokenType.IDENT, word, startLine, startColumn));
+    }
+
+    public bool CheckIsNote(string note)
+    {
+        if (note.Length == 0)
+        {
+            return false;
+        }
+
+        if (!NoteLetters.Contains(note[0]))
+        {
+            return false;
+        }
+
+        if (note.Length == 1)
+        {
+            return true;
+        }
+
+        if (note.Length == 2)
+        {
+            return OctaveDigits.Contains(note[1]) || note[1] == '#' || note[1] == 'b';
+        }
+
+        if (note.Length == 3)
+        {
+            var secondChar = note[1];
+            return (secondChar == '#' || secondChar == 'b') && OctaveDigits.Contains(note[2]);
+        }
+
+        return false;
     }
 
     private void AddNumberToken()
