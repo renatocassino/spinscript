@@ -22,6 +22,7 @@ public class Lexer
         ["play"] = TokenType.PLAY,
         ["song"] = TokenType.SONG,
         ["beat"] = TokenType.BEAT,
+        ["melody"] = TokenType.MELODY,
     };
 
     private static readonly Dictionary<string, TokenType> BooleanKeywords = new()

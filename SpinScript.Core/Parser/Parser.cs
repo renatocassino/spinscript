@@ -222,12 +222,33 @@ public class Parser
         return new BeatNode(beatName.Value, parameters, steps, beatName.Line, beatName.Column);
     }
 
-    private StepOrMelody.MelodyValue ParseMelody()
+    public AstNode ParseMelody()
+    {
+        Consume(TokenType.MELODY);
+        var beatName = Consume(TokenType.REFERENCE);
+        var parameters = ParseParams();
+
+        Consume(TokenType.LBRACE);
+
+        var notes = ParseNotes();
+
+        Consume(TokenType.RBRACE);
+        Consume(TokenType.SEMICOLON);
+
+        return new MelodyNode(beatName.Value, parameters, notes, beatName.Line, beatName.Column);
+    }
+
+
+    private List<Note> ParseNotes()
     {
         var melody = new List<Note>();
 
-        while (!Check(TokenType.RBRACE))
+        while (!Check(TokenType.RBRACE) && !Check(TokenType.COMMA))
         {
+            if (Check(TokenType.COMMA))
+            {
+                Consume(TokenType.COMMA);
+            }
             var noteValue = Consume(TokenType.NOTE);
 
             var startAt = Consume(TokenType.FRACTION); // TODO - Validate number too here
@@ -236,7 +257,8 @@ public class Parser
 
             melody.Add(new Note(noteValue.Value, ParseFraction(startAt.Value), ParseFraction(duration.Value), parameters));
         }
-        return new StepOrMelody.MelodyValue(melody);
+
+        return melody;
     }
 
     private int ParseFraction(string input)

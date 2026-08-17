@@ -331,6 +331,46 @@ public class TokenizerTests
     }
 
     [Fact]
+    public void TokenizeMelody()
+    {
+        var tokens = new Lexer("melody @piano (volume=2) { C3 1/2 1/4 }").Tokenize();
+
+        Assert.Equal(TokenType.MELODY, tokens[0].Type);
+        Assert.Equal("melody", tokens[0].Value);
+
+        Assert.Equal(TokenType.REFERENCE, tokens[1].Type);
+        Assert.Equal("piano", tokens[1].Value);
+
+        Assert.Equal(TokenType.LPAREN, tokens[2].Type);
+        Assert.Equal("(", tokens[2].Value);
+
+        Assert.Equal(TokenType.IDENT, tokens[3].Type);
+        Assert.Equal("volume", tokens[3].Value);
+
+        Assert.Equal(TokenType.EQUALS, tokens[4].Type);
+        Assert.Equal("=", tokens[4].Value);
+
+        Assert.Equal(TokenType.NUMBER, tokens[5].Type);
+        Assert.Equal("2", tokens[5].Value);
+
+        Assert.Equal(TokenType.RPAREN, tokens[6].Type);
+        Assert.Equal(")", tokens[6].Value);
+
+        Assert.Equal(TokenType.LBRACE, tokens[7].Type);
+
+        Assert.Equal(TokenType.NOTE, tokens[8].Type);
+        Assert.Equal("C3", tokens[8].Value);
+
+        Assert.Equal(TokenType.FRACTION, tokens[9].Type);
+        Assert.Equal("1/2", tokens[9].Value);
+
+        Assert.Equal(TokenType.FRACTION, tokens[10].Type);
+        Assert.Equal("1/4", tokens[10].Value);
+
+        Assert.Equal(TokenType.RBRACE, tokens[11].Type);
+    }
+
+    [Fact]
     public void TokenizeBeatSintax()
     {
         var tokens = new Lexer("beat @kick (grid=16) { 9 };\nbeat hats (sound=hihat, grid=16) { 3, 7, 11, 15 };").Tokenize();
