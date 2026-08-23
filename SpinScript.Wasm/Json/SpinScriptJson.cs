@@ -13,6 +13,7 @@ public static class SpinScriptJson
 
         options.Converters.Add(new AstNodeJsonConverter());
         options.Converters.Add(new SpinValueJsonConverter());
+        options.Converters.Add(new EventJsonConverter());
 
         return options;
     }

@@ -6,6 +6,7 @@ public enum TokenType
     FRACTION, // 1/4, 2/4, 1/2
     NOTE,
     STRING_LITERAL, // 'value' or "value"
+    PATTERN_GRID,
     SEMICOLON,
     EQUALS,
     NUMBER,

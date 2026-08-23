@@ -34,6 +34,14 @@ public sealed class AstNodeJsonConverter : JsonConverter<AstNode>
                 JsonSerializer.Serialize(writer, pattern.Steps, options);
                 WriteLocation(writer, pattern.Line, pattern.Column);
                 break;
+            case MelodyNode melody:
+                writer.WriteString("type", "melody");
+                writer.WriteString("name", melody.Name);
+                WriteParameters(writer, "parameters", melody.Parameters, options);
+                writer.WritePropertyName("notes");
+                JsonSerializer.Serialize(writer, melody.Notes, options);
+                WriteLocation(writer, melody.Line, melody.Column);
+                break;
             case LoopNode loop:
                 writer.WriteString("type", "loop");
                 writer.WriteString("name", loop.Name);

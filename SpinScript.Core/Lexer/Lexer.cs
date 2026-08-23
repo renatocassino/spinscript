@@ -63,6 +63,11 @@ public class Lexer
 
             if (char.IsLetter(currentChar))
             {
+                if (TryAddBoolean() || TryAddKeyword() || TryAddNote() || TryAddPatternGrid())
+                {
+                    continue;
+                }
+
                 AddReservedWord();
                 continue;
             }
@@ -160,6 +165,143 @@ public class Lexer
         _index++;
     }
 
+    private bool TryAddBoolean()
+    {
+        int start = _index;
+        int startLine = _line;
+        int startColumn = _column;
+        _index++;
+        _column++;
+
+        while (_index < _input.Length &&
+            (char.IsLetterOrDigit(_input[_index]) || _input[_index] == '_' || _input[_index] == '#'))
+        {
+            _index++;
+            _column++;
+        }
+
+        var word = _input[start.._index];
+        if (BooleanKeywords.TryGetValue(word, out var booleanType))
+        {
+            _tokens.Add(new Token(TokenType.BOOLEAN, word, startLine, startColumn));
+            return true;
+        }
+
+        _index = start;
+        _line = startLine;
+        _column = startColumn;
+
+        return false;
+    }
+
+    private bool TryAddKeyword()
+    {
+        int start = _index;
+        int startLine = _line;
+        int startColumn = _column;
+        _index++;
+        _column++;
+
+        while (_index < _input.Length &&
+            (char.IsLetterOrDigit(_input[_index]) || _input[_index] == '_' || _input[_index] == '#'))
+        {
+            _index++;
+            _column++;
+        }
+
+        var word = _input[start.._index];
+        if (Keywords.TryGetValue(word, out var keywordType))
+        {
+            _tokens.Add(new Token(keywordType, word, startLine, startColumn));
+            return true;
+        }
+
+        _index = start;
+        _line = startLine;
+        _column = startColumn;
+
+        return false;
+    }
+
+    private bool TryAddNote()
+    {
+        int start = _index;
+        int startLine = _line;
+        int startColumn = _column;
+        _index++;
+        _column++;
+
+        while (_index < _input.Length &&
+            (char.IsLetterOrDigit(_input[_index]) || _input[_index] == '#'))
+        {
+            _index++;
+            _column++;
+        }
+
+        var word = _input[start.._index];
+
+        if (CheckIsNote(word))
+        {
+            _tokens.Add(new Token(TokenType.NOTE, word, startLine, startColumn));
+            return true;
+        }
+
+        _index = start;
+        _line = startLine;
+        _column = startColumn;
+
+        return false;
+    }
+
+    private bool TryAddPatternGrid()
+    {
+        int start = _index;
+        int startLine = _line;
+        int startColumn = _column;
+        _index++;
+        _column++;
+
+        while (_index < _input.Length &&
+            (char.IsLetterOrDigit(_input[_index]) || _input[_index] == '|' || _input[_index] == '.'))
+        {
+            _index++;
+            _column++;
+        }
+
+        var word = _input[start.._index];
+
+        if (CheckIsPatternGrid(word))
+        {
+            _tokens.Add(new Token(TokenType.NOTE, word, startLine, startColumn));
+            return true;
+        }
+
+        _index = start;
+        _line = startLine;
+        _column = startColumn;
+
+        return false;
+    }
+
+    private bool CheckIsPatternGrid(string pattern)
+    {
+        if (pattern.Length == 0)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < pattern.Length; i++)
+        {
+            var currentChar = pattern[i];
+            if (currentChar != 'x' && currentChar != '.' && currentChar != '-' && currentChar != '|')
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private void AddReservedWord()
     {
         int start = _index;
@@ -176,24 +318,6 @@ public class Lexer
         }
 
         var word = _input[start.._index];
-
-        if (BooleanKeywords.TryGetValue(word, out var booleanType))
-        {
-            _tokens.Add(new Token(TokenType.BOOLEAN, word, startLine, startColumn));
-            return;
-        }
-
-        if (Keywords.TryGetValue(word, out var keywordType))
-        {
-            _tokens.Add(new Token(keywordType, word, startLine, startColumn));
-            return;
-        }
-
-        if (CheckIsNote(word))
-        {
-            _tokens.Add(new Token(TokenType.NOTE, word, startLine, startColumn));
-            return;
-        }
 
         _tokens.Add(new Token(TokenType.IDENT, word, startLine, startColumn));
     }

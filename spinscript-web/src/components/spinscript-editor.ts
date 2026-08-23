@@ -8,13 +8,31 @@ import '@awesome.me/webawesome/dist/components/tag/tag.js';
 import '@awesome.me/webawesome/dist/components/spinner/spinner.js';
 import '@awesome.me/webawesome/dist/components/divider/divider.js';
 
+// Mirrors SpinScript.Wasm/Json/EventJsonConverter.cs: `type` discriminates
+// between the two event shapes it writes ("sound" for SoundEvent, "melody"
+// for MelodyEvent), so `rate` is only ever present on melody events.
 interface SpinScriptEvent {
+  type: 'sound' | 'melody';
   time: number;
   sample: string;
+  velocity?: number;
+  duration?: number;
+  note?: string;
+  rate?: number;
 }
 
 interface InterpretResult {
   events: SpinScriptEvent[];
+}
+
+// Both Parse() and Interpret() catch exceptions on the .NET side and encode
+// them as this shape instead of throwing across the JS interop boundary.
+interface InterpretError {
+  error: string;
+}
+
+function isInterpretError(value: unknown): value is InterpretError {
+  return typeof value === 'object' && value !== null && 'error' in value;
 }
 
 interface SpinScriptExports {
@@ -34,7 +52,7 @@ const TOKEN_REGEX = new RegExp(
     // instead of just matching its numerator.
     String.raw`(?<fraction>\b[0-9]+/[0-9]+\b)`,
     String.raw`(?<number>\b[0-9]+(?:\.[0-9]+)?\b)`,
-    String.raw`(?<keyword>\b(?:song|loop|beat|play)\b)`,
+    String.raw`(?<keyword>\b(?:song|loop|beat|melody|play)\b)`,
     // A letter A-G, optionally followed by an octave digit (A4), an
     // accidental (C#, Db), or both (Eb8, F#9). Mirrors Lexer.CheckIsNote.
     String.raw`(?<note>\b[A-G](?:[#b][0-9]?|[0-9])?\b)`,
@@ -238,9 +256,10 @@ export class SpinScriptEditor extends LitElement {
     if (!this.#spinscript) return;
 
     try {
-      this.#spinscript.Parse(source);
-      this.error = '';
+      const parsed: unknown = JSON.parse(this.#spinscript.Parse(source));
+      this.error = isInterpretError(parsed) ? parsed.error : '';
     } catch (e) {
+      console.error(e);
       this.error = (e as Error).message;
     }
   }
@@ -289,10 +308,15 @@ export class SpinScriptEditor extends LitElement {
 
   // Schedules `buffer` to start playing `delayMs` milliseconds from now (uses
   // the AudioContext clock, not setTimeout, so timing stays sample-accurate).
-  #playSample(buffer: AudioBuffer, delayMs = 0): AudioBufferSourceNode {
+  // `rate` is a melody note's playback rate (1 = original pitch/speed);
+  // omit it for plain sound events.
+  #playSample(buffer: AudioBuffer, delayMs = 0, rate?: number): AudioBufferSourceNode {
     const audioContext = this.#ensureAudioContext();
     const source = audioContext.createBufferSource();
     source.buffer = buffer;
+    if (rate !== undefined) {
+      source.playbackRate.value = rate;
+    }
     source.connect(audioContext.destination);
     source.start(audioContext.currentTime + delayMs / 1000);
     return source;
@@ -304,7 +328,13 @@ export class SpinScriptEditor extends LitElement {
     if (this.isPlaying || !this.#spinscript) return;
 
     try {
-      const result = JSON.parse(this.#spinscript.Interpret(this.code)) as InterpretResult;
+      const parsed: unknown = JSON.parse(this.#spinscript.Interpret(this.code));
+
+      if (isInterpretError(parsed)) {
+        throw new Error(parsed.error);
+      }
+
+      const result = parsed as InterpretResult;
 
       const uniqueSamples = Object.keys(
         result.events.reduce((accum, curr) => ({ ...accum, [curr.sample]: true }), {} as Record<string, boolean>),
@@ -330,7 +360,8 @@ export class SpinScriptEditor extends LitElement {
           if (timeToStart < lookaheadMs) {
             const buffer = buffers.get(event.sample);
             if (buffer) {
-              this.#playSample(buffer, Math.max(timeToStart, 0));
+              const rate = event.type === 'melody' ? event.rate : undefined;
+              this.#playSample(buffer, Math.max(timeToStart, 0), rate);
             }
             return false;
           }
@@ -351,6 +382,7 @@ export class SpinScriptEditor extends LitElement {
 
       playNextEvents();
     } catch (e) {
+      console.error(e);
       this.error = (e as Error).message;
       this.isPlaying = false;
     }

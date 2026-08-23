@@ -263,6 +263,7 @@ public class Interpreter
     {
         var parameters = melody.Parameters;
 
+        var rootNote = parameters.ContainsKey("rootNote") ? parameters["rootNote"].AsString() : "C4";
         var sample = parameters.ContainsKey("sample") ? parameters["sample"].AsString() : null;
         if (sample != null && sample.StartsWith("@"))
         {
@@ -289,7 +290,7 @@ public class Interpreter
             // Add parameters in the future
 
             // Calc metrics here
-            var rate = CalcRate(noteNotation,"C4");
+            var rate = CalcRate(noteNotation, rootNote);
             Console.WriteLine($"Add note {noteNotation} - {startTimeNotation}-{durationTimeNotation} {rate}");
             var melodyEvent = new MelodyEvent(sample ?? "unknown", startTimeNotation, startTimeNotation + durationTimeNotation, noteNotation, rate);
             _interpretResult.Events.Add(melodyEvent);

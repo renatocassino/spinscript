@@ -85,7 +85,7 @@
       "patterns": [
         {
           "name": "keyword.control.spin",
-          "match": "\\b(song|loop|beat|play)\\b"
+          "match": "\\b(song|loop|beat|melody|play)\\b"
         }
       ]
     },
