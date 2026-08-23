@@ -10,7 +10,9 @@ public class ParserTests
     [Fact]
     public void ParserRunnerExample() {
         var p = new Parser("@bpm = 129;");
-        p.Parse();
+        var program = p.Parse();
+
+        Assert.False(program.HasErrors);
     }
 
     [Fact]
@@ -18,16 +20,19 @@ public class ParserTests
     {
         var program = new Parser("@bpm = 129; @steps=3; @volume=120;").Parse();
 
-        var assignment = Assert.IsType<AssignmentNode>(program.Statements[0]);
+        Assert.False(program.HasErrors);
+
+        var ast = program.Ast;
+        var assignment = Assert.IsType<AssignmentNode>(ast.Statements[0]);
 
         Assert.Equal("bpm", assignment.Name);
         Assert.Equal(129, assignment.Value.AsNumber());
 
-        var assignment2 = Assert.IsType<AssignmentNode>(program.Statements[1]);
+        var assignment2 = Assert.IsType<AssignmentNode>(ast.Statements[1]);
         Assert.Equal("steps", assignment2.Name);
         Assert.Equal(3, assignment2.Value.AsNumber());
 
-        var assignment3 = Assert.IsType<AssignmentNode>(program.Statements[2]);
+        var assignment3 = Assert.IsType<AssignmentNode>(ast.Statements[2]);
         Assert.Equal("volume", assignment3.Name);
         Assert.Equal(120, assignment3.Value.AsNumber());
     }
@@ -47,7 +52,9 @@ loop @intro {
 }
 """).Parse();
 
-        var loop = Assert.IsType<LoopNode>(program.Statements[0]);
+        Assert.False(program.HasErrors);
+
+        var loop = Assert.IsType<LoopNode>(program.Ast.Statements[0]);
         Assert.Equal("intro", loop.Name);
         Assert.Single(loop.Statements);
 
@@ -75,7 +82,9 @@ loop @intro {
 play @song1 (bpm=120, volume=80); 
 """).Parse();
 
-        var play = Assert.IsType<PlayNode>(program.Statements[0]);
+        Assert.False(program.HasErrors);
+
+        var play = Assert.IsType<PlayNode>(program.Ast.Statements[0]);
         Assert.Equal("song1", play.PatternName);
 
         var parameter = play.Parameters;
@@ -92,7 +101,9 @@ play @song1 (bpm=120, volume=80);
     {
         var program = new Parser(input).Parse();
 
-        var loop = Assert.IsType<LoopNode>(program.Statements[0]);
+        Assert.False(program.HasErrors);
+
+        var loop = Assert.IsType<LoopNode>(program.Ast.Statements[0]);
         Assert.Equal(expectedName, loop.Name);
         Assert.Equal(expectedStatementCount, loop.Statements.Count);
     }
@@ -103,7 +114,8 @@ play @song1 (bpm=120, volume=80);
     [InlineData("loop { }")]
     public void ParseLoopWithInvalidBodyThrows(string input)
     {
-        Assert.Throws<ParserException>(() => new Parser(input).Parse());
+        var program = new Parser(input).Parse();
+        Assert.True(program.HasErrors);
     }
 
    [Fact]
@@ -111,13 +123,15 @@ play @song1 (bpm=120, volume=80);
     {
         var program = new Parser("beat @kick (grid=16) { 9 };\nbeat @hats (grid=16) { 3, 7, 11, 15 };").Parse();
 
-        var beat = Assert.IsType<BeatNode>(program.Statements[0]);
+        Assert.False(program.HasErrors);
+
+        var beat = Assert.IsType<BeatNode>(program.Ast.Statements[0]);
 
         Assert.Equal("kick", beat.Name);
         Assert.Equal(16, beat.Parameters["grid"].AsInt());
         Assert.Equal([9], beat.Steps);
 
-        var beat2 = Assert.IsType<BeatNode>(program.Statements[1]);
+        var beat2 = Assert.IsType<BeatNode>(program.Ast.Statements[1]);
 
         Assert.Equal("hats", beat2.Name);
         Assert.Equal(16, beat2.Parameters["grid"].AsInt());
@@ -129,13 +143,15 @@ play @song1 (bpm=120, volume=80);
     {
         var program = new Parser("beat @kick (grid=16) { x...|.x..|..x.|x..x };\nbeat @hats (grid=16) { 0, 5, 10, 12, 15 };").Parse();
 
-        var beat = Assert.IsType<BeatNode>(program.Statements[0]);
+        Assert.False(program.HasErrors);
+
+        var beat = Assert.IsType<BeatNode>(program.Ast.Statements[0]);
 
         Assert.Equal("kick", beat.Name);
         Assert.Equal(16, beat.Parameters["grid"].AsInt());
         Assert.Equal([0, 5, 10, 12, 15], beat.Steps);
 
-        var beat2 = Assert.IsType<BeatNode>(program.Statements[1]);
+        var beat2 = Assert.IsType<BeatNode>(program.Ast.Statements[1]);
 
         Assert.Equal("hats", beat2.Name);
         Assert.Equal(16, beat2.Parameters["grid"].AsInt());
@@ -147,7 +163,9 @@ play @song1 (bpm=120, volume=80);
     {
         var program = new Parser("melody @lead { E4 1/4 0, G4 1/4 1/4 };").Parse();
 
-        var melody = Assert.IsType<MelodyNode>(program.Statements[0]);
+        Assert.False(program.HasErrors);
+
+        var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
 
         Assert.Equal("lead", melody.Name);
         Assert.Equal(2, melody.Notes.Count);
@@ -160,7 +178,9 @@ play @song1 (bpm=120, volume=80);
     {
         var program = new Parser("melody @lead { E4 1/4 0, G4 1/4 1/4, };").Parse();
 
-        var melody = Assert.IsType<MelodyNode>(program.Statements[0]);
+        Assert.False(program.HasErrors);
+
+        var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
 
         Assert.Equal("lead", melody.Name);
         Assert.Equal(2, melody.Notes.Count);

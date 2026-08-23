@@ -32,7 +32,11 @@ public class Interpreter
     public void Interpret()
     {
         var ast = _parser.Parse();
-        RegisterStatements(ast);
+        if (ast.HasErrors)
+        {
+            throw new Exception($"Several errors found {ast.Errors.Count}");
+        }
+        RegisterStatements(ast.Ast);
         UpdateConfiguration();
         InterpretStatements();
     }

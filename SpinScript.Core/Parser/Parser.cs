@@ -3,6 +3,11 @@ namespace SpinScript.Parser;
 using Ast;
 using SpinScript.Lexer;
 
+public record ParseResult(ProgramNode Ast, IReadOnlyList<ParserException> Errors)
+{
+    public bool HasErrors => Errors.Count > 0;
+}
+
 /// <summary>
 /// Recursive-descent parser that consumes the token stream produced by the
 /// <see cref="Lexer"/> and builds the SpinScript abstract syntax tree
@@ -17,6 +22,8 @@ public class Parser
     private int _index;
     private readonly List<Token> _tokens = [];
 
+    private readonly List<ParserException> _errors = [];
+
     /// <summary>
     /// Tokenizes the given source text up front so the parser can operate
     /// purely on the resulting token list instead of interleaving lexing
@@ -29,6 +36,7 @@ public class Parser
     public Parser(string input)
     {
         _tokens = new Lexer(input).Tokenize();
+        _errors = [];
         _index = 0;
     }
 
@@ -45,29 +53,59 @@ public class Parser
     /// statements: an <see cref="AssignmentNode"/>, a <see cref="BeatNode"/>
     /// and a <see cref="PlayNode"/>.
     /// </example>
-    public ProgramNode Parse()
+    public ParseResult Parse()
     {
         var statements = new List<AstNode>();
 
         while (_index < _tokens.Count)
         {
-            var token = _tokens[_index];
+            try {
+                var token = _tokens[_index];
 
-            switch (token.Type)
+                switch (token.Type)
+                {
+                    case TokenType.REFERENCE: statements.Add(ParseReference()); break;
+                    case TokenType.BEAT: statements.Add(ParseBeat()); break;
+                    case TokenType.MELODY: statements.Add(ParseMelody()); break;
+                    case TokenType.LOOP: statements.Add(ParseLoop()); break;
+                    case TokenType.PLAY: statements.Add(ParsePlay()); break;
+                    case TokenType.EOF: ParseEOF(); break;
+                    case TokenType.SONG: statements.Add(ParseSong()); break;
+                    default:
+                        throw new ParserException($"Cannot parse token '{token.Type}' with value '{token.Value}'", token.Line, token.Column);
+                }
+            } catch (ParserException exception)
             {
-                case TokenType.REFERENCE: statements.Add(ParseReference()); break;
-                case TokenType.BEAT: statements.Add(ParseBeat()); break;
-                case TokenType.MELODY: statements.Add(ParseMelody()); break;
-                case TokenType.LOOP: statements.Add(ParseLoop()); break;
-                case TokenType.PLAY: statements.Add(ParsePlay()); break;
-                case TokenType.EOF: ParseEOF(); break;
-                case TokenType.SONG: statements.Add(ParseSong()); break;
-                default:
-                    throw new ParserException($"Cannot parse token '{token.Type}' with value '{token.Value}'", token.Line, token.Column);
+                _errors.Add(exception);
+                SyncNextToken();
             }
         }
 
-        return new ProgramNode(statements);
+        return new ParseResult(new ProgramNode(statements), _errors);
+    }
+
+    private static readonly HashSet<TokenType> SyncTokens = new()
+    {
+        TokenType.REFERENCE,
+        TokenType.BEAT,
+        TokenType.MELODY,
+        TokenType.LOOP,
+        TokenType.PLAY,
+        TokenType.SONG,
+        TokenType.EOF,
+    };
+
+    private void SyncNextToken()
+    {
+        while (_index < _tokens.Count)
+        {
+            if (SyncTokens.Contains(_tokens[_index].Type))
+            {
+                return;
+            }
+
+            _index++;
+        }
     }
 
     /// <summary>
