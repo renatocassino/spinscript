@@ -355,6 +355,33 @@ public class Parser
             return steps;
         }
 
+        if (Check(TokenType.PATTERN_GRID))
+        {
+            var patternGrid = Consume(TokenType.PATTERN_GRID);
+
+            var countIndex = 0;
+            for (int i = 0; i < patternGrid.Value.Length; i++)
+            {
+                var currentChar = patternGrid.Value[i];
+                if (currentChar == '.')
+                {
+                    continue;
+                }
+                if (currentChar == '|')
+                {
+                    countIndex += 1;
+                    continue;
+                }
+                if (currentChar == 'x')
+                {
+                    steps.Add(i - countIndex);
+                    continue;
+                }
+            }
+
+            return steps;
+        }
+
         steps.Add(int.Parse(Consume(TokenType.NUMBER).Value));
 
         while (Match(TokenType.COMMA))

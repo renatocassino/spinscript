@@ -755,6 +755,39 @@ public class TokenizerTests
         Assert.Equal(TokenType.EOF, tokens[1].Type);
     }
 
+    [Theory]
+    [InlineData("x")]
+    [InlineData("xx")]
+    [InlineData("x.")]
+    [InlineData("x..")]
+    [InlineData("x...")]
+    [InlineData("x|x")]
+    [InlineData("x|x|x|x")]
+    [InlineData("x.x.x.x.")]
+    [InlineData("x...|x..x.|.x.xx")]
+    public void TokenizePatternGrid_ReturnsPatternGridToken(string pattern)
+    {
+        var tokens = new Lexer(pattern).Tokenize();
+
+        Assert.Equal(TokenType.PATTERN_GRID, tokens[0].Type);
+        Assert.Equal(pattern, tokens[0].Value);
+        Assert.Equal(TokenType.EOF, tokens[1].Type);
+    }
+
+    [Theory]
+    [InlineData("z", TokenType.IDENT, "z")]
+    [InlineData("X", TokenType.IDENT, "X")]
+    [InlineData("xyz", TokenType.IDENT, "xyz")]
+    [InlineData("A", TokenType.NOTE, "A")]
+    public void TokenizePatternGridLikeInput_FallsBackWhenNotAValidGrid(string input, TokenType expectedType, string expectedValue)
+    {
+        var tokens = new Lexer(input).Tokenize();
+
+        Assert.Equal(expectedType, tokens[0].Type);
+        Assert.Equal(expectedValue, tokens[0].Value);
+        Assert.Equal(TokenType.EOF, tokens[1].Type);
+    }
+
     [Fact]
     public void TokenizeIdentifierStopsAtNonWordCharacter()
     {

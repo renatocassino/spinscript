@@ -165,123 +165,69 @@ public class Lexer
         _index++;
     }
 
-    private bool TryAddBoolean()
+    private static bool IsIdentifierChar(char c) => char.IsLetterOrDigit(c) || c == '_' || c == '#';
+    private static bool IsNoteChar(char c) => char.IsLetterOrDigit(c) || c == '#';
+    private static bool IsPatternGridChar(char c) => char.IsLetterOrDigit(c) || c == '|' || c == '.';
+
+    private (string Word, int StartIndex, int StartLine, int StartColumn) ScanWord(Func<char, bool> predicate)
     {
-        int start = _index;
+        int startIndex = _index;
         int startLine = _line;
         int startColumn = _column;
         _index++;
         _column++;
 
-        while (_index < _input.Length &&
-            (char.IsLetterOrDigit(_input[_index]) || _input[_index] == '_' || _input[_index] == '#'))
+        while (_index < _input.Length && predicate(_input[_index]))
         {
             _index++;
             _column++;
         }
 
-        var word = _input[start.._index];
-        if (BooleanKeywords.TryGetValue(word, out var booleanType))
-        {
-            _tokens.Add(new Token(TokenType.BOOLEAN, word, startLine, startColumn));
-            return true;
-        }
-
-        _index = start;
-        _line = startLine;
-        _column = startColumn;
-
-        return false;
+        return (_input[startIndex.._index], startIndex, startLine, startColumn);
     }
 
-    private bool TryAddKeyword()
+    private void ResetTo(int index, int line, int column)
     {
-        int start = _index;
-        int startLine = _line;
-        int startColumn = _column;
-        _index++;
-        _column++;
-
-        while (_index < _input.Length &&
-            (char.IsLetterOrDigit(_input[_index]) || _input[_index] == '_' || _input[_index] == '#'))
-        {
-            _index++;
-            _column++;
-        }
-
-        var word = _input[start.._index];
-        if (Keywords.TryGetValue(word, out var keywordType))
-        {
-            _tokens.Add(new Token(keywordType, word, startLine, startColumn));
-            return true;
-        }
-
-        _index = start;
-        _line = startLine;
-        _column = startColumn;
-
-        return false;
+        _index = index;
+        _line = line;
+        _column = column;
     }
 
-    private bool TryAddNote()
+    private bool TryAddFromDictionary(Dictionary<string, TokenType> dictionary, Func<char, bool> predicate)
     {
-        int start = _index;
-        int startLine = _line;
-        int startColumn = _column;
-        _index++;
-        _column++;
+        var (word, startIndex, startLine, startColumn) = ScanWord(predicate);
 
-        while (_index < _input.Length &&
-            (char.IsLetterOrDigit(_input[_index]) || _input[_index] == '#'))
+        if (dictionary.TryGetValue(word, out var tokenType))
         {
-            _index++;
-            _column++;
-        }
-
-        var word = _input[start.._index];
-
-        if (CheckIsNote(word))
-        {
-            _tokens.Add(new Token(TokenType.NOTE, word, startLine, startColumn));
+            _tokens.Add(new Token(tokenType, word, startLine, startColumn));
             return true;
         }
 
-        _index = start;
-        _line = startLine;
-        _column = startColumn;
-
+        ResetTo(startIndex, startLine, startColumn);
         return false;
     }
 
-    private bool TryAddPatternGrid()
+    private bool TryAddWordToken(Func<char, bool> predicate, Func<string, bool> isValid, TokenType tokenType)
     {
-        int start = _index;
-        int startLine = _line;
-        int startColumn = _column;
-        _index++;
-        _column++;
+        var (word, startIndex, startLine, startColumn) = ScanWord(predicate);
 
-        while (_index < _input.Length &&
-            (char.IsLetterOrDigit(_input[_index]) || _input[_index] == '|' || _input[_index] == '.'))
+        if (isValid(word))
         {
-            _index++;
-            _column++;
-        }
-
-        var word = _input[start.._index];
-
-        if (CheckIsPatternGrid(word))
-        {
-            _tokens.Add(new Token(TokenType.NOTE, word, startLine, startColumn));
+            _tokens.Add(new Token(tokenType, word, startLine, startColumn));
             return true;
         }
 
-        _index = start;
-        _line = startLine;
-        _column = startColumn;
-
+        ResetTo(startIndex, startLine, startColumn);
         return false;
     }
+
+    private bool TryAddBoolean() => TryAddFromDictionary(BooleanKeywords, IsIdentifierChar);
+
+    private bool TryAddKeyword() => TryAddFromDictionary(Keywords, IsIdentifierChar);
+
+    private bool TryAddNote() => TryAddWordToken(IsNoteChar, CheckIsNote, TokenType.NOTE);
+
+    private bool TryAddPatternGrid() => TryAddWordToken(IsPatternGridChar, CheckIsPatternGrid, TokenType.PATTERN_GRID);
 
     private bool CheckIsPatternGrid(string pattern)
     {
@@ -304,21 +250,7 @@ public class Lexer
 
     private void AddReservedWord()
     {
-        int start = _index;
-        int startLine = _line;
-        int startColumn = _column;
-        _index++;
-        _column++;
-
-        while (_index < _input.Length &&
-            (char.IsLetterOrDigit(_input[_index]) || _input[_index] == '_' || _input[_index] == '#'))
-        {
-            _index++;
-            _column++;
-        }
-
-        var word = _input[start.._index];
-
+        var (word, _, startLine, startColumn) = ScanWord(IsIdentifierChar);
         _tokens.Add(new Token(TokenType.IDENT, word, startLine, startColumn));
     }
 
