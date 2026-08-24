@@ -1,3 +1,4 @@
+using System.Linq;
 using SpinScript.Lexer;
 using Xunit;
 
@@ -603,6 +604,170 @@ public class TokenizerTests
         Assert.Equal("steps", tokens[4].Value);
         Assert.Equal(4, tokens[4].Line);
         Assert.Equal(0, tokens[4].Column);
+    }
+
+    [Fact]
+    public void TokenizeMultilineDoubleQuoteStringTracksLineAfterClose()
+    {
+        // A string literal spanning multiple physical lines must still let
+        // the lexer count those embedded newlines: everything tokenized
+        // after the closing quote has to resume counting from the real
+        // line/column, not from wherever it was when the quote opened.
+        var input = "@a = \"x\ny\";\n@b = 1;";
+        var tokens = new Lexer(input).Tokenize();
+
+        Assert.Equal(TokenType.STRING_LITERAL, tokens[2].Type);
+        Assert.Equal(0, tokens[2].Line);
+        Assert.Equal(5, tokens[2].Column); // aponta pra aspa de abertura, mesma linha
+
+        Assert.Equal(TokenType.SEMICOLON, tokens[3].Type);
+        Assert.Equal(1, tokens[3].Line); // depois de 1 '\n' dentro da string
+        Assert.Equal(2, tokens[3].Column); // 'y";' -> ';' é a 3ª coluna (0,1,2)
+
+        Assert.Equal(TokenType.REFERENCE, tokens[4].Type);
+        Assert.Equal("b", tokens[4].Value);
+        Assert.Equal(2, tokens[4].Line); // 1 '\n' na string + 1 '\n' real
+        Assert.Equal(0, tokens[4].Column);
+    }
+
+    [Fact]
+    public void TokenizeMultilineSingleQuoteStringTracksLineAfterClose()
+    {
+        var input = "@a = 'x\ny';\n@b = 1;";
+        var tokens = new Lexer(input).Tokenize();
+
+        Assert.Equal(TokenType.STRING_LITERAL, tokens[2].Type);
+        Assert.Equal("x\ny", tokens[2].Value);
+
+        Assert.Equal(TokenType.REFERENCE, tokens[4].Type);
+        Assert.Equal(2, tokens[4].Line);
+        Assert.Equal(0, tokens[4].Column);
+    }
+
+    [Fact]
+    public void TokenizeStringWithMultipleEmbeddedNewlinesCountsEachLine()
+    {
+        var input = "@a = \"one\ntwo\nthree\";\n@b = 2;";
+        var tokens = new Lexer(input).Tokenize();
+
+        Assert.Equal("one\ntwo\nthree", tokens[2].Value);
+
+        // 3 linhas dentro da string (2 '\n') + 1 '\n' real após o ';'
+        Assert.Equal(3, tokens[4].Line);
+        Assert.Equal(0, tokens[4].Column);
+    }
+
+    [Fact]
+    public void TokenizeUnterminatedMultilineStringReportsOpeningQuotePosition()
+    {
+        var ex = Assert.Throws<LexerException>(() => new Lexer("@a = \"one\ntwo").Tokenize());
+
+        // Mesmo cruzando linhas, o erro ainda aponta pra abertura da aspa.
+        Assert.Equal(0, ex.Line);
+        Assert.Equal(5, ex.Column);
+    }
+
+    [Fact]
+    public void TokenizeHandlesCarriageReturnLineFeedAsSingleLineBreak()
+    {
+        var input = "@a = 1;\r\n@b = 2;";
+        var tokens = new Lexer(input).Tokenize();
+
+        Assert.Equal(TokenType.REFERENCE, tokens[4].Type);
+        Assert.Equal("b", tokens[4].Value);
+        Assert.Equal(1, tokens[4].Line); // só avançou 1 linha, não 2
+        Assert.Equal(0, tokens[4].Column);
+    }
+
+    [Fact]
+    public void TokenizeColumnCountsTabAsSingleColumn()
+    {
+        var tokens = new Lexer("\t\t@bpm = 1;").Tokenize();
+
+        Assert.Equal(TokenType.REFERENCE, tokens[0].Type);
+        Assert.Equal(2, tokens[0].Column); // duas tabs = 2 colunas, cada uma conta 1
+    }
+
+    [Fact]
+    public void TokenizeNoteFractionAndPatternGridColumnsAfterOtherTokens()
+    {
+        var tokens = new Lexer("melody @m { C#4 1/2 1/4 }").Tokenize();
+
+        var noteToken = tokens.First(t => t.Type == TokenType.NOTE);
+        Assert.Equal("C#4", noteToken.Value);
+        Assert.Equal(0, noteToken.Line);
+        Assert.Equal(12, noteToken.Column);
+
+        var fractions = tokens.Where(t => t.Type == TokenType.FRACTION).ToList();
+        Assert.Equal(16, fractions[0].Column); // "1/2" começa logo após "C#4 "
+        Assert.Equal(20, fractions[1].Column); // "1/4" começa depois de "1/2 "
+    }
+
+    [Fact]
+    public void TokenizePatternGridColumnAfterBrace()
+    {
+        var tokens = new Lexer("beat @k { x..x }").Tokenize();
+
+        var gridToken = tokens.Single(t => t.Type == TokenType.PATTERN_GRID);
+        Assert.Equal(0, gridToken.Line);
+        Assert.Equal(10, gridToken.Column);
+    }
+
+    [Fact]
+    public void TokenizeBooleanAndIdentColumnsAcrossLines()
+    {
+        var tokens = new Lexer("beat @k (grid=16)\n  { muted true, mode };").Tokenize();
+
+        var muted = tokens.Single(t => t.Type == TokenType.IDENT && t.Value == "muted");
+        Assert.Equal(1, muted.Line);
+        Assert.Equal(4, muted.Column);
+
+        var trueToken = tokens.Single(t => t.Type == TokenType.BOOLEAN);
+        Assert.Equal(1, trueToken.Line);
+        Assert.Equal(10, trueToken.Column);
+    }
+
+    [Fact]
+    public void TokenizeMultipleStatementsAcrossLinesReportsEachTokenPosition()
+    {
+        var input = "@a = 1;\n@bb = 22;\n  @ccc = 333;\n";
+        var tokens = new Lexer(input).Tokenize();
+
+        Assert.Equal(0, tokens[0].Line);
+        Assert.Equal(0, tokens[0].Column); // @a
+
+        Assert.Equal(1, tokens[4].Line);
+        Assert.Equal(0, tokens[4].Column); // @bb
+
+        Assert.Equal(2, tokens[8].Line);
+        Assert.Equal(2, tokens[8].Column); // @ccc, indentado 2 espaços
+    }
+
+    [Fact]
+    public void TokenizeFractionWithDuplicateSlashThrowsWithLineAndColumn()
+    {
+        var ex = Assert.Throws<LexerException>(() => new Lexer("1/2/3;").Tokenize());
+
+        Assert.Equal(0, ex.Line);
+        Assert.Equal(0, ex.Column);
+    }
+
+    [Fact]
+    public void TokenizeFractionWithDuplicateSlashOnSecondLineThrowsWithLineAndColumn()
+    {
+        var ex = Assert.Throws<LexerException>(() => new Lexer("@a = 1;\n1/2/3;").Tokenize());
+
+        Assert.Equal(1, ex.Line);
+        Assert.Equal(0, ex.Column);
+    }
+
+    [Fact]
+    public void TokenizeIntegerOverflowThrowsWithLineAndColumn()
+    {
+        var ex = Assert.Throws<LexerException>(() => new Lexer("@a = 999999999999999999999;").Tokenize());
+
+        Assert.Equal(0, ex.Line);
+        Assert.Equal(5, ex.Column); // aponta pro início do número
     }
 
     [Fact]

@@ -1,5 +1,6 @@
 namespace SpinScript.Tests.src.Parser;
 
+using System.Linq;
 using SpinScript.Parser;
 using SpinScript.Parser.Ast;
 using SpinScript.Lexer;
@@ -186,5 +187,381 @@ play @song1 (bpm=120, volume=80);
         Assert.Equal(2, melody.Notes.Count);
         Assert.Equal("E4", melody.Notes[0].NoteName);
         Assert.Equal("G4", melody.Notes[1].NoteName);
+    }
+
+    // --- Posição (linha/coluna) dos nós da AST ---
+
+    [Fact]
+    public void ParseAssignmentNodeTracksLineAndColumnAcrossStatements()
+    {
+        var program = new Parser("@bpm = 129;\n@steps = 3;").Parse();
+
+        Assert.False(program.HasErrors);
+
+        var first = Assert.IsType<AssignmentNode>(program.Ast.Statements[0]);
+        Assert.Equal(0, first.Line);
+        Assert.Equal(0, first.Column);
+
+        var second = Assert.IsType<AssignmentNode>(program.Ast.Statements[1]);
+        Assert.Equal(1, second.Line);
+        Assert.Equal(0, second.Column);
+    }
+
+    [Fact]
+    public void ParsePlayNodeTracksLineAndColumn()
+    {
+        var program = new Parser("beat @kick (grid=16) { 9 };\nplay @kick;").Parse();
+
+        Assert.False(program.HasErrors);
+
+        var play = Assert.IsType<PlayNode>(program.Ast.Statements[1]);
+        Assert.Equal(1, play.Line);
+        Assert.Equal(5, play.Column); // aponta pra referência '@kick', não pro 'play'
+    }
+
+    [Fact]
+    public void ParseBeatNodeTracksLineAndColumn()
+    {
+        var program = new Parser("\n  beat @kick (grid=16) { 9 };").Parse();
+
+        Assert.False(program.HasErrors);
+
+        var beat = Assert.IsType<BeatNode>(program.Ast.Statements[0]);
+        Assert.Equal(1, beat.Line);
+        Assert.Equal(7, beat.Column); // aponta pra referência '@kick'
+    }
+
+    [Fact]
+    public void ParseMelodyNodeTracksLineAndColumn()
+    {
+        var program = new Parser("\nmelody @lead { E4 1/4 0 };").Parse();
+
+        Assert.False(program.HasErrors);
+
+        var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
+        Assert.Equal(1, melody.Line);
+        Assert.Equal(7, melody.Column);
+    }
+
+    [Fact]
+    public void ParseLoopNodeTracksLineAndColumn()
+    {
+        var program = new Parser("\n  loop @times { }").Parse();
+
+        Assert.False(program.HasErrors);
+
+        var loop = Assert.IsType<LoopNode>(program.Ast.Statements[0]);
+        Assert.Equal(1, loop.Line);
+        Assert.Equal(2, loop.Column); // aponta pro keyword 'loop'
+    }
+
+    [Fact]
+    public void ParseSongNodeTracksLineAndColumn()
+    {
+        var program = new Parser("\n  song { }").Parse();
+
+        Assert.False(program.HasErrors);
+
+        var song = Assert.IsType<SongNode>(program.Ast.Statements[0]);
+        Assert.Equal(1, song.Line);
+        Assert.Equal(2, song.Column); // aponta pro keyword 'song'
+    }
+
+    // --- Posição (linha/coluna) de erros do parser ---
+
+    [Fact]
+    public void ParseReferenceWithInvalidValueReportsPositionOfOffendingToken()
+    {
+        // Regressão: o erro apontava pra posição de '@bpm' (a referência),
+        // não pra posição do token que de fato causou o problema (@invalid).
+        var parser = new Parser("@bpm = @invalid;");
+        var ex = Assert.Throws<ParserException>(() => parser.ParseReference());
+
+        Assert.Equal(0, ex.Line);
+        Assert.Equal(7, ex.Column); // posição de '@invalid', não de '@bpm'
+    }
+
+    [Fact]
+    public void ParseReferenceWithInvalidValueOnSecondLineReportsCorrectLine()
+    {
+        var parser = new Parser("@a = 1;\n@bpm = @invalid;");
+        parser.ParseReference(); // consome a primeira linha, sem erro
+
+        var ex = Assert.Throws<ParserException>(() => parser.ParseReference());
+
+        Assert.Equal(1, ex.Line);
+        Assert.Equal(7, ex.Column);
+    }
+
+    [Fact]
+    public void ParseParamWithInvalidValueReportsPositionOfOffendingToken()
+    {
+        // Regressão: o erro apontava pra posição do nome do parâmetro ('grid'),
+        // não pra posição do token inválido depois do '='.
+        var program = new Parser("beat @kick (grid=(1)) { 9 };").Parse();
+
+        Assert.True(program.HasErrors);
+        var error = Assert.Single(program.Errors);
+
+        Assert.Equal(0, error.Line);
+        Assert.Equal(17, error.Column); // posição do '(' inválido, não de 'grid'
+    }
+
+    [Fact]
+    public void ParseParamBareFlagFollowedByInvalidTokenReportsPositionOfOffendingToken()
+    {
+        // Regressão: mesmo padrão de bug, em outro ponto de ParseParam.
+        var program = new Parser("beat @kick (free 5) { 9 };").Parse();
+
+        Assert.True(program.HasErrors);
+        var error = Assert.Single(program.Errors);
+
+        Assert.Equal(0, error.Line);
+        Assert.Equal(17, error.Column); // posição do '5', não de 'free'
+    }
+
+    [Fact]
+    public void ParseParamDuplicateReportsPositionOfDuplicateToken()
+    {
+        // Aqui o token que "errou" de fato é o duplicado, então apontar pra
+        // ele é o comportamento correto (não é o bug acima).
+        var program = new Parser("beat @kick (grid=16, grid=8) { 9 };").Parse();
+
+        Assert.True(program.HasErrors);
+        var error = Assert.Single(program.Errors);
+
+        Assert.Equal(0, error.Line);
+        Assert.Equal(21, error.Column); // posição do segundo 'grid'
+    }
+
+    [Fact]
+    public void ParseConsumeMismatchReportsPositionOfActualToken()
+    {
+        var parser = new Parser("@bpm 129;"); // falta o '='
+        var ex = Assert.Throws<ParserException>(() => parser.ParseReference());
+
+        Assert.Equal(0, ex.Line);
+        Assert.Equal(5, ex.Column); // posição do '129', o token que apareceu no lugar de '='
+    }
+
+    [Fact]
+    public void ParseTopLevelUnexpectedTokenReportsItsOwnPosition()
+    {
+        var program = new Parser("42;").Parse();
+
+        Assert.True(program.HasErrors);
+        var error = Assert.Single(program.Errors);
+
+        Assert.Equal(0, error.Line);
+        Assert.Equal(0, error.Column);
+    }
+
+    [Fact]
+    public void ParseTopLevelUnexpectedTokenOnSecondLineReportsCorrectLine()
+    {
+        var program = new Parser("@a = 1;\n42;").Parse();
+
+        Assert.True(program.HasErrors);
+        var error = Assert.Single(program.Errors);
+
+        Assert.Equal(1, error.Line);
+        Assert.Equal(0, error.Column);
+    }
+
+    [Fact]
+    public void ParseLoopUnexpectedEofInsideBodyReportsEofPosition()
+    {
+        var parser = new Parser("loop @times {\n  @bpm = 1;");
+        var ex = Assert.Throws<ParserException>(() => parser.ParseLoop());
+
+        Assert.Equal(1, ex.Line);
+        Assert.Equal(11, ex.Column); // posição do EOF, uma coluna após o ';'
+    }
+
+    [Fact]
+    public void ParseSongUnexpectedEofInsideBodyReportsEofPosition()
+    {
+        var parser = new Parser("song {\n  play @kick;");
+        var ex = Assert.Throws<ParserException>(() => parser.ParseSong());
+
+        Assert.Equal(1, ex.Line);
+        Assert.Equal(13, ex.Column);
+    }
+
+    [Fact]
+    public void ParseMultipleErrorsEachReportItsOwnLineAndColumnAfterRecovery()
+    {
+        var program = new Parser("42;\n@a = 1;\n99;\n@b = 2;").Parse();
+
+        Assert.True(program.HasErrors);
+        Assert.Equal(2, program.Errors.Count);
+
+        Assert.Equal(0, program.Errors[0].Line);
+        Assert.Equal(0, program.Errors[0].Column);
+
+        Assert.Equal(2, program.Errors[1].Line);
+        Assert.Equal(0, program.Errors[1].Column);
+
+        // A recuperação de erro não deve corromper o parsing das
+        // instruções válidas entre os erros.
+        var a = Assert.IsType<AssignmentNode>(program.Ast.Statements[0]);
+        Assert.Equal("a", a.Name);
+
+        var b = Assert.IsType<AssignmentNode>(program.Ast.Statements[1]);
+        Assert.Equal("b", b.Name);
+    }
+
+    // --- Sequência de notas em melody: casos válidos e vírgulas quebradas ---
+
+    private const string ValidMelodySequence = """
+        melody @minhaAutoria (sample=@piano) {
+            G5 0/4 1/4, F5 1/4 1/4, G5 2/4 1/4, E5 3/4 1/4,
+            G5 4/4 1/4, D5 5/4 1/4, G5 6/4 1/4 }
+        """;
+
+    [Fact]
+    public void ParseMelodyWithValidNoteSequenceParsesAllNotesInOrder()
+    {
+        var program = new Parser(ValidMelodySequence).Parse();
+
+        Assert.False(program.HasErrors);
+
+        var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
+        Assert.Equal("minhaAutoria", melody.Name);
+        Assert.Equal("@piano", melody.Parameters["sample"].AsString());
+        Assert.Equal(7, melody.Notes.Count);
+
+        Assert.Equal(["G5", "F5", "G5", "E5", "G5", "D5", "G5"], melody.Notes.Select(n => n.NoteName));
+
+        Assert.Equal("0/4", melody.Notes[0].FractionStart);
+        Assert.Equal("1/4", melody.Notes[0].FractionDuration);
+        Assert.Equal("6/4", melody.Notes[6].FractionStart);
+        Assert.Equal("1/4", melody.Notes[6].FractionDuration);
+    }
+
+    [Fact]
+    public void ParseMelodyWithDoubleCommaReportsErrorAtExactPositionAndKeepsPriorNotes()
+    {
+        // Regressão: uma vírgula duplicada no meio da lista de notas tem que
+        // apontar exatamente pra vírgula extra, não pra outra linha.
+        var input = """
+            melody @minhaAutoria (sample=@piano) {
+                G5 0/4 1/4, F5 1/4 1/4, G5 2/4 1/4, E5 3/4 1/4,
+                G5 4/4 1/4, D5 5/4 1/4,, G5 6/4 1/4 };
+            """;
+
+        var program = new Parser(input).Parse();
+
+        Assert.True(program.HasErrors);
+        var error = Assert.Single(program.Errors);
+        Assert.Equal(2, error.Line);
+        Assert.Equal(27, error.Column); // a segunda vírgula, não a primeira
+
+        // As notas válidas antes do erro continuam disponíveis na AST.
+        var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
+        Assert.Equal(6, melody.Notes.Count);
+        Assert.Equal(["G5", "F5", "G5", "E5", "G5", "D5"], melody.Notes.Select(n => n.NoteName));
+    }
+
+    [Fact]
+    public void ParseMelodyWithMissingCommaBetweenNotesReportsUnexpectedNoteToken()
+    {
+        // Vírgula esquecida (em vez de duplicada): o parser não trata isso
+        // como fim da lista silenciosamente — reporta a nota inesperada na
+        // posição correta.
+        var input = """
+            melody @minhaAutoria (sample=@piano) {
+                G5 0/4 1/4, F5 1/4 1/4, G5 2/4 1/4, E5 3/4 1/4,
+                G5 4/4 1/4 D5 5/4 1/4, G5 6/4 1/4 };
+            """;
+
+        var program = new Parser(input).Parse();
+
+        Assert.True(program.HasErrors);
+        var error = Assert.Single(program.Errors);
+        Assert.Equal(2, error.Line);
+        Assert.Equal(15, error.Column); // aponta pro 'D5' que apareceu sem vírgula antes
+    }
+
+    [Fact]
+    public void ParseMelodyWithTrailingDoubleCommaBeforeClosingBraceReportsError()
+    {
+        var input = "melody @m {\n    G5 0/4 1/4, F5 1/4 1/4,, }";
+
+        var program = new Parser(input).Parse();
+
+        Assert.True(program.HasErrors);
+        var error = Assert.Single(program.Errors);
+        Assert.Equal(1, error.Line);
+        Assert.Equal(27, error.Column);
+
+        var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
+        Assert.Equal(2, melody.Notes.Count);
+    }
+
+    [Fact]
+    public void ParseMelodyWithDoubleCommaNestedInLoopReportsOnlyTheRealErrorAndKeepsSiblingStatements()
+    {
+        // Regressão principal: antes dessa correção, uma vírgula quebrada
+        // dentro de uma melody aninhada num loop fazia a recuperação de erro
+        // "vazar" pro fora do loop — o 'play' que vinha depois da melody, no
+        // mesmo bloco, era promovido incorretamente pro nível superior, e o
+        // '}' do loop sobrava como um SEGUNDO erro, numa linha completamente
+        // diferente da vírgula quebrada de fato.
+        var input = """
+            loop @composicao (bars=2) {
+                melody @minhaAutoria (sample=@piano) {
+                    G5 0/4 1/4, F5 1/4 1/4,, G5 2/4 1/4, E5 3/4 1/4,
+                    G5 4/4 1/4, D5 5/4 1/4, G5 6/4 1/4 };
+                play @minhaAutoria;
+            }
+            """;
+
+        var program = new Parser(input).Parse();
+
+        Assert.True(program.HasErrors);
+        var error = Assert.Single(program.Errors); // só o erro real, sem "fantasma" de '}'
+        Assert.Equal(2, error.Line);
+        Assert.Equal(31, error.Column);
+
+        var loop = Assert.IsType<LoopNode>(program.Ast.Statements[0]);
+        Assert.Equal(2, loop.Statements.Count);
+
+        var melody = Assert.IsType<MelodyNode>(loop.Statements[0]);
+        Assert.Equal(2, melody.Notes.Count); // notas antes do erro foram preservadas
+        Assert.Equal(["G5", "F5"], melody.Notes.Select(n => n.NoteName));
+
+        // O 'play' continua aninhado dentro do loop, não vazou pro topo.
+        var play = Assert.IsType<PlayNode>(loop.Statements[1]);
+        Assert.Equal("minhaAutoria", play.PatternName);
+    }
+
+    [Fact]
+    public void ParseBeatWithDoubleCommaInStepsNestedInLoopReportsOnlyTheRealErrorAndKeepsSiblingStatements()
+    {
+        // Mesma classe de bug do teste acima, só que na lista de steps de
+        // um beat em vez da lista de notas de uma melody.
+        var input = """
+            loop @composicao (bars=2) {
+                beat @kick (grid=16) { 1, 5,, 9, 13 };
+                play @kick;
+            }
+            """;
+
+        var program = new Parser(input).Parse();
+
+        Assert.True(program.HasErrors);
+        var error = Assert.Single(program.Errors);
+        Assert.Equal(1, error.Line);
+        Assert.Equal(32, error.Column);
+
+        var loop = Assert.IsType<LoopNode>(program.Ast.Statements[0]);
+        Assert.Equal(2, loop.Statements.Count);
+
+        var beat = Assert.IsType<BeatNode>(loop.Statements[0]);
+        Assert.Equal([1, 5], beat.Steps);
+
+        var play = Assert.IsType<PlayNode>(loop.Statements[1]);
+        Assert.Equal("kick", play.PatternName);
     }
 }

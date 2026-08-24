@@ -363,8 +363,16 @@ public class Lexer
         while (_index < _input.Length && _input[_index] != quoteChar)
         {
             strValue += _input[_index];
+            if (_input[_index] == '\n')
+            {
+                _line++;
+                _column = 0;
+            }
+            else
+            {
+                _column++;
+            }
             _index++;
-            _column++;
         }
 
         if (_index >= _input.Length)

@@ -109,6 +109,28 @@ public class Parser
     }
 
     /// <summary>
+    /// Local, non-escaping recovery for bodies that can never contain a
+    /// nested '{' of their own (a melody's note list, a beat's step list):
+    /// advances past whatever is left of the current entry without leaving
+    /// the enclosing braces. This is what keeps a malformed note/step (e.g.
+    /// a stray extra comma) from unwinding all the way out of
+    /// <see cref="ParseMelody"/>/<see cref="ParseBeat"/> — which, when that
+    /// construct is itself nested inside a <c>loop</c> or <c>song</c> body,
+    /// used to discard the entire enclosing block and then choke on its
+    /// leftover closing brace as an unrelated, confusingly-positioned
+    /// second error.
+    /// </summary>
+    private void SkipUntil(TokenType stopType)
+    {
+        while (_index < _tokens.Count &&
+               _tokens[_index].Type != stopType &&
+               _tokens[_index].Type != TokenType.EOF)
+        {
+            _index++;
+        }
+    }
+
+    /// <summary>
     /// Consumes the EOF token and asserts it is truly the last token in the
     /// stream. This guards against a malformed token list where extra
     /// tokens follow EOF, which should never happen coming from the lexer
@@ -312,16 +334,28 @@ public class Parser
             return melody;
         }
 
-        melody.Add(ParseNote());
-
-        while (Match(TokenType.COMMA))
+        try
         {
-            if (Check(TokenType.RBRACE))
-            {
-                break; // trailing comma
-            }
-
             melody.Add(ParseNote());
+
+            while (Match(TokenType.COMMA))
+            {
+                if (Check(TokenType.RBRACE))
+                {
+                    break; // trailing comma
+                }
+
+                melody.Add(ParseNote());
+            }
+        }
+        catch (ParserException exception)
+        {
+            // Ex.: uma vírgula duplicada ou faltando no meio da lista de
+            // notas. Registra o erro na posição real do token problemático
+            // e recupera só até o '}' da própria melodia — sem escapar pro
+            // bloco (loop/song) que a contém.
+            _errors.Add(exception);
+            SkipUntil(TokenType.RBRACE);
         }
 
         return melody;
@@ -420,11 +454,19 @@ public class Parser
             return steps;
         }
 
-        steps.Add(int.Parse(Consume(TokenType.NUMBER).Value));
-
-        while (Match(TokenType.COMMA))
+        try
         {
             steps.Add(int.Parse(Consume(TokenType.NUMBER).Value));
+
+            while (Match(TokenType.COMMA))
+            {
+                steps.Add(int.Parse(Consume(TokenType.NUMBER).Value));
+            }
+        }
+        catch (ParserException exception)
+        {
+            _errors.Add(exception);
+            SkipUntil(TokenType.RBRACE);
         }
 
         return steps;
@@ -465,9 +507,10 @@ public class Parser
         }
         else
         {
-            throw new ParserException($"Expected a number or string after '=' but received token '{Peek()}'.", currentToken.Line, currentToken.Column);
+            var badToken = Peek();
+            throw new ParserException($"Expected a number or string after '=' but received token '{badToken}'.", badToken.Line, badToken.Column);
         }
-        
+
         Consume(TokenType.SEMICOLON);
 
         return new AssignmentNode(varName, value, currentToken.Line, currentToken.Column);
@@ -555,7 +598,8 @@ public class Parser
             }
             else
             {
-                throw new ParserException($"Expected a comma or closing parenthesis after parameter or set a new value to '{paramName.Value}' but received token '{Peek()}'.", paramName.Line, paramName.Column);
+                var badToken = Peek();
+                throw new ParserException($"Expected a comma or closing parenthesis after parameter or set a new value to '{paramName.Value}' but received token '{badToken}'.", badToken.Line, badToken.Column);
             }
         }
         Consume(TokenType.EQUALS);
@@ -577,7 +621,8 @@ public class Parser
         }
         else
         {
-            throw new ParserException($"Expected a number or string after '=' but received token '{Peek()}'.", paramName.Line, paramName.Column);
+            var badToken = Peek();
+            throw new ParserException($"Expected a number or string after '=' but received token '{badToken}'.", badToken.Line, badToken.Column);
         }
 
         if (!parameters.TryAdd(paramName.Value, value))
