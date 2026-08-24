@@ -1,10 +1,10 @@
-namespace SpinScript.Interpreter;
+namespace SpinScript.Compiler;
 
 using System.Diagnostics.Contracts;
 using SpinScript.Parser;
 using SpinScript.Parser.Ast;
 
-public class Interpreter
+public class Compiler
 {
     private readonly string _input;
     private readonly Parser _parser;
@@ -15,30 +15,30 @@ public class Interpreter
     private Dictionary<string, LoopNode> _loops = new Dictionary<string, LoopNode>();
     private SongNode? song;
 
-    private InterpretResult _interpretResult = new InterpretResult(new List<Event>());
+    private CompileResult _compileResult = new CompileResult(new List<Event>());
 
-    public InterpretResult interpretResult => _interpretResult;
+    public CompileResult compileResult => _compileResult;
 
     private SongConfiguration _songConfiguration = new SongConfiguration(120);
 
     private int _currentTime = 0; // in milliseconds
 
-    public Interpreter(string input)
+    public Compiler(string input)
     {
         _input = input;
         _parser = new Parser(input);
     }
 
-    public void Interpret()
+    public void Compile()
     {
         var ast = _parser.Parse();
         if (ast.HasErrors)
         {
-            throw new Exception($"Several errors found {ast.Errors.Count}");
+            throw new CompilerException(ast.Errors);
         }
         RegisterStatements(ast.Ast);
         UpdateConfiguration();
-        InterpretStatements();
+        CompileStatements();
     }
 
     public void UpdateConfiguration()
@@ -108,22 +108,22 @@ public class Interpreter
         });
     }
 
-    private void InterpretStatements()
+    private void CompileStatements()
     {
         if (song == null)
         {
             throw new InvalidOperationException("No song node found.");
         }
 
-        _interpretResult = new InterpretResult(new List<Event>());
+        _compileResult = new CompileResult(new List<Event>());
 
         foreach (var statement in song.Statements)
         {
-            InterpretStatement(statement);
+            CompileStatement(statement);
         }
     }
 
-    private void InterpretStatement(AstNode statement)
+    private void CompileStatement(AstNode statement)
     {
         switch (statement)
         {
@@ -133,15 +133,15 @@ public class Interpreter
                 break;
             case BeatNode beat:
                 Console.WriteLine($"Beat: {beat.Name}");
-                InterpretBeat(beat);
+                CompileBeat(beat);
                 break;
             case MelodyNode melody:
                 Console.WriteLine($"Melody: {melody.Name}");
-                InterpretMelody(melody);
+                CompileMelody(melody);
                 break;
             case LoopNode loop:
                 Console.WriteLine($"Loop: {loop.Name}");
-                InterpretLoop(loop);
+                CompileLoop(loop);
                 break;
             case PlayNode play:
                 var isLoop = _loops.ContainsKey(play.PatternName);
@@ -176,7 +176,7 @@ public class Interpreter
                     if (isLoop || isBeat || isMelody)
                     {
                         Console.WriteLine($"Play Loop/Beat/Melody: {play.PatternName}");
-                        InterpretStatement(beatOrLoop);
+                        CompileStatement(beatOrLoop);
                         if (isBeat)
                         {
                             // A repeated bare pattern behaves like its own
@@ -184,7 +184,7 @@ public class Interpreter
                             // after the previous one instead of every
                             // repeat stacking on the exact same bar.
                             // Loops already advance _currentTime on their
-                            // own each time through InterpretLoop, so this
+                            // own each time through CompileLoop, so this
                             // only applies to plain patterns.
                             _currentTime += (int)_songConfiguration.BarDurationMs;
                         }
@@ -200,7 +200,7 @@ public class Interpreter
         }
     }
 
-    public void InterpretLoop(LoopNode loop)
+    public void CompileLoop(LoopNode loop)
     {
         var explicitBars = loop.Parameters.ContainsKey("bars")
             ? loop.Parameters["bars"].AsInt()
@@ -220,7 +220,7 @@ public class Interpreter
             // Loops (bare or via `play`) are sequential: each one picks up
             // from wherever the previous statement left _currentTime.
 
-            InterpretStatement(statement);
+            CompileStatement(statement);
 
             // Track the furthest point any single statement reached, since
             // parallel statements (e.g. two bare patterns with different
@@ -263,7 +263,7 @@ public class Interpreter
         };
     }
 
-    public int InterpretMelody(MelodyNode melody)
+    public int CompileMelody(MelodyNode melody)
     {
         var parameters = melody.Parameters;
 
@@ -297,7 +297,7 @@ public class Interpreter
             var rate = CalcRate(noteNotation, rootNote);
             Console.WriteLine($"Add note {noteNotation} - {startTimeNotation}-{durationTimeNotation} {rate}");
             var melodyEvent = new MelodyEvent(sample ?? "unknown", startTimeNotation, startTimeNotation + durationTimeNotation, noteNotation, rate);
-            _interpretResult.Events.Add(melodyEvent);
+            _compileResult.Events.Add(melodyEvent);
         }
 
         return 0;
@@ -347,7 +347,7 @@ public class Interpreter
         throw new InvalidOperationException($"Invalid time notation: '{fraction}'. Expected a fraction like '1/4' or a plain integer.");
     }
 
-    public int InterpretBeat(BeatNode beat)
+    public int CompileBeat(BeatNode beat)
     {
         var parameters = beat.Parameters;
 
@@ -355,7 +355,7 @@ public class Interpreter
         var beatsPerBar = _songConfiguration.beatsPerBar;
 
         var sample = parameters.ContainsKey("sample") ? parameters["sample"].AsString() : null;
-        Console.WriteLine($">>>>>>>>>>Interpreting Pattern: {beat.Name} - Sample: {sample} - BPM: {bpm} - BeatsPerBar: {beatsPerBar}");
+        Console.WriteLine($">>>>>>>>>>Compiling Pattern: {beat.Name} - Sample: {sample} - BPM: {bpm} - BeatsPerBar: {beatsPerBar}");
         // se sample começar com @, então é uma referência a um pattern, e não um sample direto
         if (sample != null && sample.StartsWith("@"))
         {
@@ -381,7 +381,7 @@ public class Interpreter
         {
             var startTime = _currentTime + (int)(stepMs * (statement - 1));
             var soundEvent = new SoundEvent(sample ?? "unknown", startTime, 100);
-            _interpretResult.Events.Add(soundEvent);
+            _compileResult.Events.Add(soundEvent);
             Console.WriteLine($"Step: {statement} - Sample: {sample} - StartTime: {startTime}ms");
         }
 

@@ -2,7 +2,7 @@ namespace SpinScript.Wasm.Json;
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using SpinScript.Interpreter;
+using SpinScript.Compiler;
 
 public sealed class EventJsonConverter : JsonConverter<Event>
 {

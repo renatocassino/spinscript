@@ -10,6 +10,7 @@
     { "include": "#numbers" },
     { "include": "#keywords" },
     { "include": "#notes" },
+    { "include": "#patternGrids" },
     { "include": "#variables" },
     { "include": "#parameters" },
     { "include": "#punctuation" }
@@ -96,6 +97,16 @@
         {
           "name": "constant.character.note.spin",
           "match": "\\b[A-G](?:[#b][0-9]?|[0-9])?\\b"
+        }
+      ]
+    },
+
+    "patternGrids": {
+      "comment": "Beat grids like x...x..., x|x|x|x, x...|x..x.|.x.xx: a lowercase 'x' followed by any run of 'x', '.' and '|' with no spaces. Mirrors Lexer.CheckIsPatternGrid — must start with 'x' and must not contain digits or other letters, or it falls back to an identifier/note token instead.",
+      "patterns": [
+        {
+          "name": "constant.other.pattern-grid.spin",
+          "match": "\\bx[x.|]*(?![A-Za-z0-9_])"
         }
       ]
     },

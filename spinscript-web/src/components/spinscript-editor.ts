@@ -21,23 +21,23 @@ interface SpinScriptEvent {
   rate?: number;
 }
 
-interface InterpretResult {
+interface CompileResult {
   events: SpinScriptEvent[];
 }
 
-// Both Parse() and Interpret() catch exceptions on the .NET side and encode
+// Both Parse() and Compile() catch exceptions on the .NET side and encode
 // them as this shape instead of throwing across the JS interop boundary.
-interface InterpretError {
+interface CompileError {
   error: string;
 }
 
-function isInterpretError(value: unknown): value is InterpretError {
+function isCompileError(value: unknown): value is CompileError {
   return typeof value === 'object' && value !== null && 'error' in value;
 }
 
 interface SpinScriptExports {
   Parse(source: string): string;
-  Interpret(source: string): string;
+  Compile(source: string): string;
 }
 
 const STORAGE_KEY = 'spincode';
@@ -56,6 +56,11 @@ const TOKEN_REGEX = new RegExp(
     // A letter A-G, optionally followed by an octave digit (A4), an
     // accidental (C#, Db), or both (Eb8, F#9). Mirrors Lexer.CheckIsNote.
     String.raw`(?<note>\b[A-G](?:[#b][0-9]?|[0-9])?\b)`,
+    // A beat grid like x...x..., x|x|x|x, x...|x..x.|.x.xx: a lowercase 'x'
+    // followed by any run of 'x', '.' and '|' with no spaces. Mirrors
+    // Lexer.CheckIsPatternGrid — a digit or other letter in the run falls
+    // back to an identifier/note instead, hence the trailing lookahead.
+    String.raw`(?<patternGrid>\bx[x.|]*(?![A-Za-z0-9_]))`,
     String.raw`(?<variable>@[A-Za-z][A-Za-z0-9_]*)`,
     String.raw`(?<parameter>\b[A-Za-z_][A-Za-z0-9_]*\b(?=\s*=))`,
   ].join('|'),
@@ -84,6 +89,15 @@ function highlightSpinScript(code: string): string {
   // Keeps the overlay's scroll height matching the textarea's when the
   // code ends with a trailing newline.
   return out + '\n';
+}
+
+// One number per logical line, matching the textarea's line count. Doesn't
+// account for visually wrapped lines (white-space: pre-wrap), so numbers can
+// drift from the wrapped row once a line is long enough to wrap — an
+// accepted trade-off for a plain <textarea>-based editor.
+function lineNumbers(code: string): string {
+  const count = code.split('\n').length;
+  return Array.from({ length: count }, (_, i) => i + 1).join('\n');
 }
 
 export class SpinScriptEditor extends LitElement {
@@ -149,6 +163,7 @@ export class SpinScriptEditor extends LitElement {
     }
 
     .editor {
+      --gutter-width: 3em;
       position: relative;
       width: 100%;
       height: 500px;
@@ -157,13 +172,38 @@ export class SpinScriptEditor extends LitElement {
       overflow: hidden;
     }
 
+    .gutter {
+      margin: 0;
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: var(--gutter-width);
+      padding: var(--wa-space-s) var(--wa-space-2xs) var(--wa-space-s) 0;
+      box-sizing: border-box;
+      font-family: var(--wa-font-family-code);
+      font-size: 14px;
+      line-height: 1.5;
+      white-space: pre;
+      text-align: right;
+      color: var(--wa-color-text-quiet);
+      background: var(--wa-color-surface-default);
+      border-right: 1px solid var(--wa-color-surface-border);
+      overflow: hidden;
+      user-select: none;
+      pointer-events: none;
+    }
+
     .editor pre,
     .editor textarea {
       margin: 0;
       padding: var(--wa-space-s);
       position: absolute;
-      inset: 0;
-      width: 100%;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      left: var(--gutter-width);
+      width: calc(100% - var(--gutter-width));
       height: 100%;
       box-sizing: border-box;
       font-family: var(--wa-font-family-code);
@@ -205,6 +245,9 @@ export class SpinScriptEditor extends LitElement {
     }
     .tok-note {
       color: #0086b3;
+    }
+    .tok-patternGrid {
+      color: #b08800;
     }
     .tok-variable {
       color: #6f42c1;
@@ -257,7 +300,7 @@ export class SpinScriptEditor extends LitElement {
 
     try {
       const parsed: unknown = JSON.parse(this.#spinscript.Parse(source));
-      this.error = isInterpretError(parsed) ? parsed.error : '';
+      this.error = isCompileError(parsed) ? parsed.error : '';
     } catch (e) {
       console.error(e);
       this.error = (e as Error).message;
@@ -279,6 +322,9 @@ export class SpinScriptEditor extends LitElement {
     const pre = this.shadowRoot!.getElementById('highlight')!;
     pre.scrollTop = textarea.scrollTop;
     pre.scrollLeft = textarea.scrollLeft;
+
+    const gutter = this.shadowRoot!.getElementById('gutter')!;
+    gutter.scrollTop = textarea.scrollTop;
   }
 
   #ensureAudioContext(): AudioContext {
@@ -328,13 +374,13 @@ export class SpinScriptEditor extends LitElement {
     if (this.isPlaying || !this.#spinscript) return;
 
     try {
-      const parsed: unknown = JSON.parse(this.#spinscript.Interpret(this.code));
+      const parsed: unknown = JSON.parse(this.#spinscript.Compile(this.code));
 
-      if (isInterpretError(parsed)) {
+      if (isCompileError(parsed)) {
         throw new Error(parsed.error);
       }
 
-      const result = parsed as InterpretResult;
+      const result = parsed as CompileResult;
 
       const uniqueSamples = Object.keys(
         result.events.reduce((accum, curr) => ({ ...accum, [curr.sample]: true }), {} as Record<string, boolean>),
@@ -405,6 +451,7 @@ export class SpinScriptEditor extends LitElement {
         </div>
 
         <div class="editor">
+          <div id="gutter" class="gutter" aria-hidden="true">${lineNumbers(this.code)}</div>
           <pre id="highlight" aria-hidden="true"><code>${unsafeHTML(highlightSpinScript(this.code))}</code></pre>
           <textarea
             id="spincode"

@@ -2,7 +2,7 @@ namespace SpinScript.Wasm;
 
 using System.Runtime.InteropServices.JavaScript;
 using System.Text.Json;
-using SpinScript.Interpreter;
+using SpinScript.Compiler;
 using SpinScript.Lexer;
 using SpinScript.Parser;
 using SpinScript.Wasm.Json;
@@ -16,35 +16,37 @@ public static partial class Exports
     {
         try
         {
-            var program = new Parser(source).Parse();
-            return JsonSerializer.Serialize(program, JsonOptions);
+            var result = new Parser(source).Parse();
+            if (result.HasErrors)
+            {
+                var error = result.Errors[0];
+                return SerializeError(error.Message, error.Line, error.Column);
+            }
+            return JsonSerializer.Serialize(result.Ast, JsonOptions);
         }
         catch (LexerException ex)
-        {
-            return SerializeError(ex.Message, ex.Line, ex.Column);
-        }
-        catch (ParserException ex)
         {
             return SerializeError(ex.Message, ex.Line, ex.Column);
         }
     }
 
     [JSExport]
-    public static string Interpret(string source)
+    public static string Compile(string source)
     {
         try
         {
-            var interpreter = new SpinScript.Interpreter.Interpreter(source);
-            interpreter.Interpret();
-            return JsonSerializer.Serialize(interpreter.interpretResult, JsonOptions);
+            var compiler = new SpinScript.Compiler.Compiler(source);
+            compiler.Compile();
+            return JsonSerializer.Serialize(compiler.compileResult, JsonOptions);
         }
         catch (LexerException ex)
         {
             return SerializeError(ex.Message, ex.Line, ex.Column);
         }
-        catch (ParserException ex)
+        catch (CompilerException ex)
         {
-            return SerializeError(ex.Message, ex.Line, ex.Column);
+            var error = ex.Errors[0];
+            return SerializeError(error.Message, error.Line, error.Column);
         }
         catch (InvalidOperationException ex)
         {

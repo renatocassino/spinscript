@@ -1,4 +1,4 @@
-namespace SpinScript.Interpreter;
+namespace SpinScript.Compiler;
 
 public abstract record Event;
 
@@ -6,7 +6,7 @@ public record SoundEvent(string Sample, double Time, int Velocity) : Event;
 
 public record MelodyEvent(string Sample, double Time, double Duration, string Note, double rate) : Event;
 
-public record InterpretResult(List<Event> Events);
+public record CompileResult(List<Event> Events);
 
 // ---------------------------------------------------------------------------
 // TIMING VOCABULARY

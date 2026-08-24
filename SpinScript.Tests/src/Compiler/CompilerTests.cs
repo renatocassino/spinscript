@@ -1,14 +1,14 @@
-namespace SpinScript.Tests.Intepreter;
+namespace SpinScript.Tests.src.Compiler;
 
-using SpinScript.Interpreter;
+using SpinScript.Compiler;
 using SpinScript.Parser;
 using SpinScript.Lexer;
 using Xunit;
 
-public class InterpreterTests
+public class CompilerTests
 {
     [Fact]
-    public void TestInterpreterWithSimpleInput()
+    public void TestCompilerWithSimpleInput()
     {
         var input = """
 @bpm = 129;
@@ -89,13 +89,13 @@ song {
     // play @groove (repeat=4);
 }
 """;
-        var interpreter = new Interpreter(input);
-        interpreter.Interpret();
+        var compiler = new Compiler(input);
+        compiler.Compile();
 
-        Console.WriteLine($"{interpreter.interpretResult.Events.Count}");
+        Console.WriteLine($"{compiler.compileResult.Events.Count}");
 
         Console.WriteLine("**********");
-        foreach (var soundEvent in interpreter.interpretResult.Events.OfType<SoundEvent>())
+        foreach (var soundEvent in compiler.compileResult.Events.OfType<SoundEvent>())
         {
             Console.WriteLine($"Sample: {soundEvent.Sample}, Time: {soundEvent.Time}, Velocity: {soundEvent.Velocity}");
         }
@@ -129,10 +129,10 @@ song {
     play @intro (repeat=2);
 }
 """;
-        var interpreter = new Interpreter(input);
-        interpreter.Interpret();
+        var compiler = new Compiler(input);
+        compiler.Compile();
 
-        var times = interpreter.interpretResult.Events.OfType<SoundEvent>().Select(e => e.Time).ToList();
+        var times = compiler.compileResult.Events.OfType<SoundEvent>().Select(e => e.Time).ToList();
 
         Assert.Equal([0, 2000, 4000, 6000], times);
     }
@@ -171,10 +171,10 @@ song {
     play @intro (repeat=2);
 }
 """;
-        var interpreter = new Interpreter(input);
-        interpreter.Interpret();
+        var compiler = new Compiler(input);
+        compiler.Compile();
 
-        var times = interpreter.interpretResult.Events
+        var times = compiler.compileResult.Events
             .OfType<SoundEvent>()
             .Select(e => (e.Sample, e.Time))
             .ToList();
@@ -214,15 +214,15 @@ song {
     play @groove;
 }
 """;
-        var interpreter = new Interpreter(input);
-        interpreter.Interpret();
+        var compiler = new Compiler(input);
+        compiler.Compile();
 
-        var beatTimes = interpreter.interpretResult.Events
+        var beatTimes = compiler.compileResult.Events
             .OfType<SoundEvent>()
             .Where(e => e.Sample == "kick.wav")
             .Select(e => e.Time)
             .ToList();
-        var chimbalTimes = interpreter.interpretResult.Events
+        var chimbalTimes = compiler.compileResult.Events
             .OfType<SoundEvent>()
             .Where(e => e.Sample == "hihat.wav")
             .Select(e => e.Time)

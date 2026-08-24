@@ -256,7 +256,7 @@ public class Parser
         var steps = ParseSteps();
 
         Consume(TokenType.RBRACE);
-        Consume(TokenType.SEMICOLON);
+        Match(TokenType.SEMICOLON);
 
         return new BeatNode(beatName.Value, parameters, steps, beatName.Line, beatName.Column);
     }
@@ -272,7 +272,7 @@ public class Parser
         var notes = ParseNotes();
 
         Consume(TokenType.RBRACE);
-        Consume(TokenType.SEMICOLON);
+        Match(TokenType.SEMICOLON);
 
         return new MelodyNode(beatName.Value, parameters, notes, beatName.Line, beatName.Column);
     }
