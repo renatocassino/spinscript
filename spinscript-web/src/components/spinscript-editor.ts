@@ -41,6 +41,7 @@ interface SpinScriptExports {
 }
 
 const STORAGE_KEY = 'spincode';
+const THEME_STORAGE_KEY = 'spintheme';
 
 // Mirrors spinscript-vscode/syntaxes/spinscript.tmLanguage.json, in the same
 // precedence order (comments/strings/numbers first, punctuation last).
@@ -106,12 +107,14 @@ export class SpinScriptEditor extends LitElement {
     error: { state: true },
     isPlaying: { state: true },
     ready: { state: true },
+    theme: { state: true },
   };
 
   declare code: string;
   declare error: string;
   declare isPlaying: boolean;
   declare ready: boolean;
+  declare theme: 'light' | 'dark';
 
   #spinscript: SpinScriptExports | null = null;
   #audioContext: AudioContext | null = null;
@@ -153,9 +156,20 @@ export class SpinScriptEditor extends LitElement {
       font-size: var(--wa-font-size-s);
     }
 
+    .header-actions {
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+      gap: var(--wa-space-s);
+    }
+
     .status-tag {
       flex-shrink: 0;
       gap: var(--wa-space-2xs);
+    }
+
+    .theme-toggle {
+      font-size: var(--wa-font-size-m);
     }
 
     .status-tag wa-spinner {
@@ -269,6 +283,17 @@ export class SpinScriptEditor extends LitElement {
     this.error = '';
     this.isPlaying = false;
     this.ready = false;
+    // The inline script in index.astro already applied wa-light/wa-dark to
+    // <html> before this component upgraded, so just read it back.
+    this.theme = document.documentElement.classList.contains('wa-dark') ? 'dark' : 'light';
+  }
+
+  #toggleTheme(): void {
+    const next = this.theme === 'dark' ? 'light' : 'dark';
+    this.theme = next;
+    document.documentElement.classList.remove('wa-light', 'wa-dark');
+    document.documentElement.classList.add(next === 'dark' ? 'wa-dark' : 'wa-light');
+    localStorage.setItem(THEME_STORAGE_KEY, next);
   }
 
   override connectedCallback(): void {
@@ -445,9 +470,21 @@ export class SpinScriptEditor extends LitElement {
             <h1>SpinScript WASM</h1>
             <p>Type your SpinScript code below:</p>
           </div>
-          <wa-tag class="status-tag" variant=${statusVariant} appearance="filled" size="small" pill>
-            ${!this.ready ? html`<wa-spinner></wa-spinner>` : null} ${statusLabel}
-          </wa-tag>
+          <div class="header-actions">
+            <wa-tag class="status-tag" variant=${statusVariant} appearance="filled" size="small" pill>
+              ${!this.ready ? html`<wa-spinner></wa-spinner>` : null} ${statusLabel}
+            </wa-tag>
+            <wa-button
+              class="theme-toggle"
+              appearance="outlined"
+              size="small"
+              pill
+              @click=${this.#toggleTheme}
+              aria-label=${this.theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              ${this.theme === 'dark' ? '☀️' : '🌙'}
+            </wa-button>
+          </div>
         </div>
 
         <div class="editor">

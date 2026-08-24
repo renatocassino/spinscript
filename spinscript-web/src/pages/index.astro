@@ -10,6 +10,21 @@ import '@awesome.me/webawesome/dist/styles/webawesome.css';
 		<meta name="viewport" content="width=device-width" />
 		<meta name="generator" content={Astro.generator} />
 		<title>SpinScript WASM</title>
+		<script is:inline>
+			// Applied synchronously, before first paint, to avoid a flash of the
+			// wrong theme. spinscript-editor's toggle button reads this same class
+			// (and the 'spintheme' key) once it upgrades.
+			(function () {
+				var saved = localStorage.getItem('spintheme');
+				var theme =
+					saved === 'light' || saved === 'dark'
+						? saved
+						: window.matchMedia('(prefers-color-scheme: dark)').matches
+							? 'dark'
+							: 'light';
+				document.documentElement.classList.add(theme === 'dark' ? 'wa-dark' : 'wa-light');
+			})();
+		</script>
 		<style>
 			html,
 			body {
