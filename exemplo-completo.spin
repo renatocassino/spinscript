@@ -21,7 +21,7 @@ beat @beat (sample=@kick, grid=16) {
 
 beat @chimbal (sample=@hihat, grid=16) {
     3, 7, 11, 15
-};
+}
 
 // ===================================================================
 // CATEGORIA B — melodia (notas com altura e duração, tempo livre)

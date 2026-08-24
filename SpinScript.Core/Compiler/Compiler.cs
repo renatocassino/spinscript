@@ -44,9 +44,8 @@ public class Compiler
     public void UpdateConfiguration()
     {
         _songConfiguration = new SongConfiguration(120); // Default BPM
-        if (_references.ContainsKey("bpm"))
+        if (_references.TryGetValue("bpm", out var bpmValue))
         {
-            var bpmValue = _references["bpm"];
             if (bpmValue is SpinValue.NumberValue numberValue)
             {
                 _songConfiguration = new SongConfiguration((int)numberValue.Value);

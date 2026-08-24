@@ -21,7 +21,15 @@ public sealed class RunCommand : Command<RunSettings>
         ProgramNode program;
         try
         {
-            program = new Parser(source).Parse();
+            var compiled = new Parser(source).Parse();
+            if (compiled.HasErrors)
+            {
+                var firstError = compiled.Errors[0];
+                WriteErrorPanel("Error in interpreter", firstError.Message);
+                return 1;
+            }
+
+            program = compiled.Ast;
         }
         catch (LexerException ex)
         {
