@@ -23,4 +23,5 @@ public enum TokenType
     REFERENCE,
     IDENT,
     SONG,
+    PLUS, // '+', usado na sintaxe relativa de início de nota (+1/8)
 }

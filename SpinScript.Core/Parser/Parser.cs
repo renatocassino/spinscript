@@ -309,15 +309,87 @@ public class Parser
         return Check(TokenType.FRACTION) ? Consume(TokenType.FRACTION) : Consume(TokenType.NUMBER);
     }
 
-    private Note ParseNote()
+    private Note ParseNote(Note? previousNote)
     {
         var noteValue = Consume(TokenType.NOTE);
 
-        var startAt = ConsumeNumberOrFraction();
+        var startAt = ParseNoteStartAt(previousNote);
         var duration = ConsumeNumberOrFraction();
         var parameters = ParseParameters();
 
-        return new Note(noteValue.Value, startAt.Value, duration.Value, parameters);
+        return new Note(noteValue.Value, startAt, duration.Value, parameters);
+    }
+
+    /// <summary>
+    /// Parses a note's start time, which is either an absolute value (as
+    /// before: a plain integer or a fraction) or, as syntax sugar, a value
+    /// prefixed with '+' that's relative to the *end* of the previous note
+    /// in the same melody — e.g. in <c>G4 1/2 1/4, F4 +1/8 1/4</c>, the
+    /// second note starts at <c>1/2 + 1/4</c> (where the first note ends)
+    /// plus <c>1/8</c>. This exists so that editing an earlier note's
+    /// duration doesn't require recalculating every absolute start time
+    /// below it by hand. Resolved to a plain absolute fraction string right
+    /// here at parse time, so nothing downstream (AST shape, compiler) has
+    /// to know this sugar exists.
+    /// </summary>
+    private string ParseNoteStartAt(Note? previousNote)
+    {
+        if (!Check(TokenType.PLUS))
+        {
+            return ConsumeNumberOrFraction().Value;
+        }
+
+        var plusToken = Consume(TokenType.PLUS);
+
+        if (previousNote is null)
+        {
+            throw new ParserException(
+                "The '+' relative start syntax needs a previous note in the same melody to be relative to.",
+                plusToken.Line, plusToken.Column);
+        }
+
+        var offset = ConsumeNumberOrFraction();
+
+        var previousEnd = TimeFraction.Add(
+            TimeFraction.Parse(previousNote.FractionStart),
+            TimeFraction.Parse(previousNote.FractionDuration));
+
+        return TimeFraction.Add(previousEnd, TimeFraction.Parse(offset.Value)).ToString();
+    }
+
+    /// <summary>
+    /// Minimal exact-rational helper used only to resolve the '+' relative
+    /// start syntax at parse time (see <see cref="ParseNoteStartAt"/>).
+    /// Parses/formats using the same plain-integer and 'n/d' fraction
+    /// notations already accepted for note start/duration values, so the
+    /// result can be fed right back through the normal (non-sugar) path.
+    /// </summary>
+    private readonly record struct TimeFraction(long Numerator, long Denominator)
+    {
+        public static TimeFraction Parse(string value)
+        {
+            if (value.Contains('/'))
+            {
+                var parts = value.Split('/');
+                return Reduce(new TimeFraction(long.Parse(parts[0]), long.Parse(parts[1])));
+            }
+
+            return new TimeFraction(long.Parse(value), 1);
+        }
+
+        public static TimeFraction Add(TimeFraction a, TimeFraction b) => Reduce(new TimeFraction(
+            a.Numerator * b.Denominator + b.Numerator * a.Denominator,
+            a.Denominator * b.Denominator));
+
+        private static TimeFraction Reduce(TimeFraction value)
+        {
+            var divisor = Gcd(Math.Abs(value.Numerator), value.Denominator);
+            return divisor == 0 ? value : new TimeFraction(value.Numerator / divisor, value.Denominator / divisor);
+        }
+
+        private static long Gcd(long a, long b) => b == 0 ? a : Gcd(b, a % b);
+
+        public override string ToString() => Denominator == 1 ? Numerator.ToString() : $"{Numerator}/{Denominator}";
     }
 
     /// <summary>
@@ -336,7 +408,7 @@ public class Parser
 
         try
         {
-            melody.Add(ParseNote());
+            melody.Add(ParseNote(previousNote: null));
 
             while (Match(TokenType.COMMA))
             {
@@ -345,7 +417,7 @@ public class Parser
                     break; // trailing comma
                 }
 
-                melody.Add(ParseNote());
+                melody.Add(ParseNote(melody[^1]));
             }
         }
         catch (ParserException exception)

@@ -85,6 +85,7 @@ public class Lexer
                 case ')': AddToken(TokenType.RPAREN, currentChar.ToString()); break;
                 case '/': SkipComment(); break;
                 case ',': AddToken(TokenType.COMMA, currentChar.ToString()); break;
+                case '+': AddToken(TokenType.PLUS, currentChar.ToString()); break;
                 default:
                     throw new LexerException($"Unexpected character '{currentChar}'", _line, _column);
             }

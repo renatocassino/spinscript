@@ -1112,6 +1112,29 @@ public class TokenizerTests
     }
 
     [Fact]
+    public void TokenizePlusTokenForRelativeNoteStartSyntax()
+    {
+        var tokens = new Lexer("F4 +1/8 1/4").Tokenize();
+
+        Assert.Equal(TokenType.NOTE, tokens[0].Type);
+        Assert.Equal("F4", tokens[0].Value);
+
+        Assert.Equal(TokenType.PLUS, tokens[1].Type);
+        Assert.Equal("+", tokens[1].Value);
+        Assert.Equal(0, tokens[1].Line);
+        Assert.Equal(3, tokens[1].Column);
+
+        Assert.Equal(TokenType.FRACTION, tokens[2].Type);
+        Assert.Equal("1/8", tokens[2].Value);
+        Assert.Equal(4, tokens[2].Column);
+
+        Assert.Equal(TokenType.FRACTION, tokens[3].Type);
+        Assert.Equal("1/4", tokens[3].Value);
+
+        Assert.Equal(TokenType.EOF, tokens[4].Type);
+    }
+
+    [Fact]
     public void TokenizeFullSongBlockReturnsExpectedTokenSequence()
     {
         var tokens = new Lexer("song { loop repeat @times { play @track; } }").Tokenize();

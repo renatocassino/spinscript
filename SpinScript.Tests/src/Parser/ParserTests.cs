@@ -564,4 +564,150 @@ play @song1 (bpm=120, volume=80);
         var play = Assert.IsType<PlayNode>(loop.Statements[1]);
         Assert.Equal("kick", play.PatternName);
     }
+
+    // --- Sintaxe de início relativo de nota ('+offset') ---
+
+    [Fact]
+    public void ParseMelodyWithRelativeStartResolvesToAbsoluteFractionAfterPreviousNoteEnds()
+    {
+        // Exemplo do pedido original: G4 termina em 1/2 + 1/4 = 3/4,
+        // então F4 (+1/8) deve começar em 3/4 + 1/8 = 7/8.
+        var program = new Parser("melody @m { G4 1/2 1/4, F4 +1/8 1/4 };").Parse();
+
+        Assert.False(program.HasErrors);
+
+        var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
+        Assert.Equal("1/2", melody.Notes[0].FractionStart);
+        Assert.Equal("7/8", melody.Notes[1].FractionStart);
+        Assert.Equal("1/4", melody.Notes[1].FractionDuration); // duração não é afetada pelo '+'
+    }
+
+    [Fact]
+    public void ParseMelodyWithChainedRelativeStartsAccumulatesCorrectly()
+    {
+        var program = new Parser(
+            "melody @m { G4 0 1/4, F4 +0 1/4, E4 +0 1/4, D4 +1/8 1/4 };").Parse();
+
+        Assert.False(program.HasErrors);
+
+        var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
+        Assert.Equal(["0", "1/4", "1/2", "7/8"], melody.Notes.Select(n => n.FractionStart));
+    }
+
+    [Fact]
+    public void ParseMelodyRelativeStartAutomaticallyCascadesWhenAnEarlierDurationChanges()
+    {
+        // Esse é o problema original que o '+' resolve: mudar a duração de
+        // uma nota anterior não deveria exigir recalcular manualmente o
+        // início de todas as notas seguintes.
+        var withOriginalDuration = new Parser(
+            "melody @m { G4 0 1/4, F4 +0 1/4, E4 +0 1/4 };").Parse();
+        var originalStarts = Assert.IsType<MelodyNode>(withOriginalDuration.Ast.Statements[0])
+            .Notes.Select(n => n.FractionStart);
+        Assert.Equal(["0", "1/4", "1/2"], originalStarts);
+
+        // Só a duração da primeira nota mudou (1/4 -> 1/2); as notas
+        // seguintes usam a mesma sintaxe '+0' de antes, sem tocar em nada.
+        var withChangedDuration = new Parser(
+            "melody @m { G4 0 1/2, F4 +0 1/4, E4 +0 1/4 };").Parse();
+        var shiftedStarts = Assert.IsType<MelodyNode>(withChangedDuration.Ast.Statements[0])
+            .Notes.Select(n => n.FractionStart);
+        Assert.Equal(["0", "1/2", "3/4"], shiftedStarts);
+    }
+
+    [Fact]
+    public void ParseMelodyWithRelativeStartUsingIntegerOffsetAddsWholeBar()
+    {
+        var program = new Parser("melody @m { G4 0 1/4, F4 +1 1/4 };").Parse();
+
+        Assert.False(program.HasErrors);
+
+        var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
+        Assert.Equal("5/4", melody.Notes[1].FractionStart); // 1/4 (fim da anterior) + 1 (bar inteiro)
+    }
+
+    [Fact]
+    public void ParseMelodyRelativeStartReducesResultToLowestTerms()
+    {
+        var program = new Parser("melody @m { G4 0 1/2, F4 +1/2 1/4 };").Parse();
+
+        Assert.False(program.HasErrors);
+
+        var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
+        Assert.Equal("1", melody.Notes[1].FractionStart); // 1/2 + 1/2 = 2/2, reduzido pra "1"
+    }
+
+    [Fact]
+    public void ParseMelodyMixingAbsoluteAndRelativeStartsInSameNoteListWorks()
+    {
+        var program = new Parser(
+            "melody @m { G4 0/4 1/4, F4 1/4 1/4, G4 +0 1/4, E4 3/4 1/4 };").Parse();
+
+        Assert.False(program.HasErrors);
+
+        var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
+        Assert.Equal(["0/4", "1/4", "1/2", "3/4"], melody.Notes.Select(n => n.FractionStart));
+    }
+
+    [Fact]
+    public void ParseMelodyWithRelativeStartOnFirstNoteThrowsAtThePlusToken()
+    {
+        var input = "melody @m { G4 +1/8 1/4 };";
+
+        var program = new Parser(input).Parse();
+
+        Assert.True(program.HasErrors);
+        var error = Assert.Single(program.Errors);
+        Assert.Contains("previous note", error.Message);
+        Assert.Equal(0, error.Line);
+        Assert.Equal(15, error.Column); // posição do '+'
+    }
+
+    [Fact]
+    public void ParseMelodyWithRelativeStartMissingOffsetValueThrowsAtOffendingToken()
+    {
+        var input = "melody @m { G4 0 1/4, F4 +, G4 1/4 };";
+
+        var program = new Parser(input).Parse();
+
+        Assert.True(program.HasErrors);
+        var error = Assert.Single(program.Errors);
+        Assert.Equal(0, error.Line);
+        Assert.Equal(26, error.Column); // posição da vírgula que veio no lugar do offset
+    }
+
+    [Fact]
+    public void ParseMelodyWithRelativeStartFollowedByInvalidOffsetTokenThrowsAtOffendingToken()
+    {
+        var input = "melody @m { G4 0 1/4, F4 + G4 1/4 };";
+
+        var program = new Parser(input).Parse();
+
+        Assert.True(program.HasErrors);
+        var error = Assert.Single(program.Errors);
+        Assert.Equal(0, error.Line);
+        Assert.Equal(27, error.Column); // posição do 'G4' que veio no lugar do offset
+    }
+
+    [Fact]
+    public void ParseMelodyRelativeStartStillRecoversFromUnrelatedCommaError()
+    {
+        // Garante que a sintaxe '+' não quebra a recuperação de erro já
+        // existente pra vírgulas duplicadas no meio da lista de notas.
+        var input = """
+            melody @m {
+                G4 0 1/4, F4 +0 1/4,, E4 +0 1/4
+            };
+            """;
+
+        var program = new Parser(input).Parse();
+
+        Assert.True(program.HasErrors);
+        var error = Assert.Single(program.Errors);
+        Assert.Equal(1, error.Line);
+
+        var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
+        Assert.Equal(2, melody.Notes.Count);
+        Assert.Equal(["0", "1/4"], melody.Notes.Select(n => n.FractionStart));
+    }
 }
