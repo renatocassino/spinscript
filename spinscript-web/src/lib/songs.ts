@@ -3,6 +3,8 @@
 // or throw (private windows, blocked site data), and the playground must
 // still work — it just won't remember anything in that case.
 
+import { migrateSampleUrls } from './sample-renames';
+
 export interface Song {
   id: string;
   name: string;
@@ -21,7 +23,7 @@ const LEGACY_KEY = 'spincode';
 
 export const NEW_SONG_CODE = `@bpm = 120;
 
-@kick = "/samples/molla/MOLLA Sounds - Kick/MOLLA Sounds - Kick - Punchy.wav";
+@kick = "/samples/kick/punchy.wav";
 
 beat @kickPart (sample=@kick) { 1, 5, 9, 13 }
 
@@ -57,7 +59,9 @@ function parse(raw: string | null): SongLibrary | null {
   if (!raw) return null;
   try {
     const data = JSON.parse(raw) as Partial<SongLibrary>;
-    const songs = Array.isArray(data.songs) ? data.songs.filter(isSong) : [];
+    const songs = Array.isArray(data.songs)
+      ? data.songs.filter(isSong).map((s) => ({ ...s, code: migrateSampleUrls(s.code) }))
+      : [];
     if (songs.length === 0) return null;
     const activeId = songs.some((s) => s.id === data.activeId) ? data.activeId! : songs[0].id;
     return { activeId, songs };
@@ -71,7 +75,8 @@ export function loadLibrary(): SongLibrary {
   const saved = parse(read(STORAGE_KEY));
   if (saved) return saved;
 
-  const legacy = read(LEGACY_KEY);
+  const stored = read(LEGACY_KEY);
+  const legacy = stored === null ? null : migrateSampleUrls(stored);
   const first = createSong(legacy ? 'My song' : 'Untitled', legacy ?? NEW_SONG_CODE);
   return { activeId: first.id, songs: [first] };
 }

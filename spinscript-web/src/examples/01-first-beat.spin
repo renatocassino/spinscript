@@ -4,9 +4,9 @@
 
 @bpm = 100;
 
-@kick  = "/samples/molla/MOLLA Sounds - Kick/MOLLA Sounds - Kick - Punchy.wav";
-@snare = "/samples/molla/MOLLA Sounds - Snare & Clap/MOLLA Sounds - Snare - Tight.wav";
-@hat   = "/samples/molla/MOLLA Sounds - Hi-Hat/MOLLA Sounds - Hihat - 01.wav";
+@kick  = "/samples/kick/punchy.wav";
+@snare = "/samples/snare/tight.wav";
+@hat   = "/samples/hihat/closed-01.wav";
 
 // A bar has 16 steps (grid=16): 1, 5, 9 and 13 are the four beats.
 beat @kickPart  (sample=@kick)  { 1, 5, 9, 13 }

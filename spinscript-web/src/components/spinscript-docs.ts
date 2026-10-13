@@ -7,10 +7,10 @@ import '@awesome.me/webawesome/dist/components/copy-button/copy-button.js';
 import { highlightSpinScript, tokenStyles } from '../lib/highlight';
 import { sampleGroups } from '../lib/samples';
 
-const KICK = '/samples/molla/MOLLA Sounds - Kick/MOLLA Sounds - Kick - Punchy.wav';
-const SNARE = '/samples/molla/MOLLA Sounds - Snare & Clap/MOLLA Sounds - Snare - Tight.wav';
-const HAT = '/samples/molla/MOLLA Sounds - Hi-Hat/MOLLA Sounds - Hihat - 01.wav';
-const PIANO = '/samples/molla/MOLLA Sounds - Tonal/MOLLA Sounds - Piano (C3).wav';
+const KICK = '/samples/kick/punchy.wav';
+const SNARE = '/samples/snare/tight.wav';
+const HAT = '/samples/hihat/closed-01.wav';
+const PIANO = '/samples/tonal/piano-c3.wav';
 
 const SECTIONS: { id: string; title: string }[] = [
   { id: 'intro', title: 'Introduction' },
@@ -185,11 +185,14 @@ export class SpinScriptDocs extends LitElement {
         padding: var(--wa-space-3xs) 0;
       }
 
-      .sound .label {
-        min-width: 9em;
+      .sound .root {
+        color: var(--wa-color-text-quiet);
+        font-family: var(--wa-font-family-code);
+        font-size: var(--wa-font-size-xs);
+        white-space: nowrap;
       }
 
-      .sound code {
+      .sound code.url {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -783,31 +786,49 @@ song {
   }
 
   #sounds() {
+    const tree = sampleGroups
+      .map((g) => `${`${g.folder}/`.padEnd(8)} ${g.samples.map((x) => x.label).join(', ')}`)
+      .join('\n');
+
     return html`<section id="sounds">
       <h2>Sounds</h2>
       <p>
-        These sounds come with the playground. Copy a line into your song, then use the variable as a
-        <code>sample</code>. Any other URL you can reach works too (the server has to allow cross-origin requests).
+        These sounds come with the playground. They're organized by category, one folder each, with short
+        lowercase names:
+      </p>
+      <div class="example"><pre><code>/samples/&lt;category&gt;/&lt;name&gt;.wav
+
+${tree}</code></pre></div>
+      <p>
+        So a punchy kick is <code>"/samples/kick/punchy.wav"</code> and an open hi-hat is
+        <code>"/samples/hihat/open-01.wav"</code>. Copy a line below into your song and use the variable as a
+        <code>sample</code>:
+      </p>
+      ${this.#code(`
+@kickPunchy = "/samples/kick/punchy.wav";
+
+beat @kicks (sample=@kickPunchy) { 1, 5, 9, 13 }`)}
+      <p>
+        <strong>Tonal sounds</strong> (for melodies) have the note they were recorded at at the end of their name —
+        <code>piano-c3</code> is a C3, <code>808/clean-a</code> an A (<code>A1</code>). That note is the melody's
+        <code>rootNote</code>: <code>melody @lead (sample=@piano, rootNote="C3") { ... }</code>.
       </p>
       <div class="sounds">
         ${sampleGroups.map(
           (group) => html`<div>
             <h3>${group.name}</h3>
             ${group.samples.map((sample) => {
-              const line = `@${toVariableName(sample.label)} = "${sample.url}";`;
+              const line = `@${sample.variable} = "${sample.url}";`;
               return html`<div class="sound">
-                <span class="label">${sample.label}</span>
-                <code title=${sample.url}>${sample.rootNote ? `rootNote="${sample.rootNote}"` : sample.url}</code>
-                <wa-copy-button value=${line} copy-label="Copy variable" success-label="Copied!"></wa-copy-button>
+                <code class="url" title=${sample.url}>${sample.url}</code>
+                ${sample.rootNote ? html`<span class="root">rootNote="${sample.rootNote}"</span>` : null}
+                <wa-copy-button value=${line} copy-label="Copy ${line}" success-label="Copied!"></wa-copy-button>
               </div>`;
             })}
           </div>`,
         )}
       </div>
-      <p>
-        For the tonal sounds, the code column shows the <code>rootNote</code> to use in the melody, e.g.
-        <code>melody @lead (sample=@piano, rootNote="C3") { ... }</code>.
-      </p>
+      <p>Any other URL you can reach works too, as long as its server allows cross-origin requests.</p>
     </section>`;
   }
 
@@ -931,13 +952,6 @@ song {                     // loops: one after the other
 }`)}
     </section>`;
   }
-}
-
-// "Snare BoomBap" -> "snareBoomBap", "808 clean" -> "s808Clean"
-function toVariableName(label: string): string {
-  const words = label.split(/[^A-Za-z0-9]+/).filter(Boolean);
-  const name = words.map((w, i) => (i === 0 ? w.toLowerCase() : w[0].toUpperCase() + w.slice(1).toLowerCase())).join('');
-  return /^[A-Za-z]/.test(name) ? name : `s${name}`;
 }
 
 customElements.define('spinscript-docs', SpinScriptDocs);

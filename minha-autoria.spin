@@ -8,7 +8,7 @@
 
 @bpm = 100;
 
-@piano = "/PIANO-C3.wav";
+@piano = "/samples/tonal/grand-piano-c3.wav";
 
 // ===================================================================
 // MELODIA — cada nota tem: qual é, onde começa e quanto dura, em

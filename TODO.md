@@ -85,9 +85,10 @@ grupo.
       ter uma "biblioteca padrão" de grooves.
 - [ ] **Marcadores / seções nomeadas** no `song` para pular direto
       (`play @chorus from=bar 9`).
-- [ ] **Refactor dos samples do playground** (`public/samples/molla/`):
-      nomes curtos e sem espaços (`/samples/kick/punchy.wav`), confirmar a
-      licença do pack.
+- [x] **Refactor dos samples do playground:** `public/samples/<categoria>/<nome>.wav`
+      em kebab-case (`kick/punchy.wav`, `tonal/piano-c3.wav`); músicas
+      salvas no navegador com os caminhos antigos são migradas ao carregar.
+- [ ] Confirmar a licença do pack de samples.
 - [ ] **Escapes em strings** (`"\"`) e strings multilinha, se fizer falta.
 
 ## Áudio / mixagem

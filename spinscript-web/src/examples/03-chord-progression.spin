@@ -5,9 +5,9 @@
 
 @bpm = 90;
 
-@pad  = "/samples/molla/MOLLA Sounds - Tonal/MOLLA Sounds - Pad (C3).wav";
-@kick = "/samples/molla/MOLLA Sounds - Kick/MOLLA Sounds - Kick - Subby.wav";
-@clap = "/samples/molla/MOLLA Sounds - Snare & Clap/MOLLA Sounds - Clap - Wet.wav";
+@pad  = "/samples/tonal/pad-c3.wav";
+@kick = "/samples/kick/subby.wav";
+@clap = "/samples/clap/wet.wav";
 
 // The pad sample is a recording of C3, so rootNote="C3".
 // Start and length are fractions of a bar: 0 = top of bar 1, 1 = bar 2...

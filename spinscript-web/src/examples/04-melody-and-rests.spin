@@ -4,7 +4,7 @@
 
 @bpm = 96;
 
-@piano = "/samples/molla/MOLLA Sounds - Tonal/MOLLA Sounds - Piano (C3).wav";
+@piano = "/samples/tonal/piano-c3.wav";
 
 melody @tune (sample=@piano, rootNote="C3") {
     // NOTE  START  LENGTH  (1/4 = one beat)

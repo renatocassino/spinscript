@@ -19,7 +19,7 @@ export function formatTime(ms: number): string {
 
 function sampleLabel(url: string): string {
   const file = decodeURIComponent(url.split('?')[0].split('/').pop() ?? url);
-  return file.replace(/\.(wav|mp3|ogg|flac)$/i, '').replace(/^MOLLA Sounds - /, '');
+  return file.replace(/\.(wav|mp3|ogg|flac)$/i, '');
 }
 
 /**

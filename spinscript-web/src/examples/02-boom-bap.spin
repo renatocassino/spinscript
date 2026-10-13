@@ -4,11 +4,11 @@
 
 @bpm = 88;
 
-@kick  = "/samples/molla/MOLLA Sounds - Kick/MOLLA Sounds - Kick - Lo-Fi.wav";
-@snare = "/samples/molla/MOLLA Sounds - Snare & Clap/MOLLA Sounds - Snare - BoomBap.wav";
-@hat   = "/samples/molla/MOLLA Sounds - Hi-Hat/MOLLA Sounds - Hihat - 02.wav";
-@open  = "/samples/molla/MOLLA Sounds - Hi-Hat/MOLLA Sounds - Openhat - 01.wav";
-@rim   = "/samples/molla/MOLLA Sounds - Perc/MOLLA Sounds - Rimshot.wav";
+@kick  = "/samples/kick/lo-fi.wav";
+@snare = "/samples/snare/boom-bap.wav";
+@hat   = "/samples/hihat/closed-02.wav";
+@open  = "/samples/hihat/open-01.wav";
+@rim   = "/samples/perc/rimshot.wav";
 
 beat @kickA  (sample=@kick)  { x...|....|..x.|.x.. }
 beat @kickB  (sample=@kick)  { x...|...x|..x.|.... }

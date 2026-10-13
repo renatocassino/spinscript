@@ -4,12 +4,12 @@
 
 @bpm = 110;
 
-@kick  = "/samples/molla/MOLLA Sounds - Kick/MOLLA Sounds - Kick - Clean.wav";
-@snare = "/samples/molla/MOLLA Sounds - Snare & Clap/MOLLA Sounds - Snare - Funk.wav";
-@hat   = "/samples/molla/MOLLA Sounds - Hi-Hat/MOLLA Sounds - Hihat - 03.wav";
-@conga = "/samples/molla/MOLLA Sounds - Perc/MOLLA Sounds - Conga 01.wav";
-@piano = "/samples/molla/MOLLA Sounds - Tonal/MOLLA Sounds - Piano (C3).wav";
-@pad   = "/samples/molla/MOLLA Sounds - Tonal/MOLLA Sounds - Pad (C3).wav";
+@kick  = "/samples/kick/clean.wav";
+@snare = "/samples/snare/funk.wav";
+@hat   = "/samples/hihat/closed-03.wav";
+@conga = "/samples/perc/conga-01.wav";
+@piano = "/samples/tonal/piano-c3.wav";
+@pad   = "/samples/tonal/pad-c3.wav";
 
 beat @kicks  (sample=@kick)  { 1, 7, 9, 11 }
 beat @snares (sample=@snare) { 5, 13 }
