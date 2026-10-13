@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Core + CLI + testes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet build SpinScript
+      - run: dotnet test SpinScript.Tests
+
+  web:
+    name: WASM + playground
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet workload install wasm-tools
+      # sync-wasm copia a saída Debug de SpinScript.Wasm para public/wasm
+      - run: dotnet build SpinScript.Wasm
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: spinscript-web/package-lock.json
+      - run: npm ci
+        working-directory: spinscript-web
+      - run: npm run build
+        working-directory: spinscript-web
+
+  vscode:
+    name: Extensão VS Code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: spinscript-vscode/package-lock.json
+      - run: npm ci
+        working-directory: spinscript-vscode
+      - run: npm run compile
+        working-directory: spinscript-vscode

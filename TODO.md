@@ -8,7 +8,7 @@ grupo.
 
 ## Correções / dívidas conhecidas
 
-- [ ] **Grid pattern 0-indexado vs. lista 1-indexada.** O compilador
+- [x] **Grid pattern 0-indexado vs. lista 1-indexada.** O compilador
       subtrai 1 dos dois formatos, então `{ x... }` dispara um step antes
       (e o primeiro `x` cai *antes* do compasso). Normalizar no parser ou
       no compilador e cobrir com teste.
@@ -102,6 +102,6 @@ grupo.
 
 - [ ] Testes de ponta a ponta: cada `.spin` de exemplo compila e gera
       uma timeline esperada (snapshot).
-- [ ] CI (GitHub Actions) rodando `dotnet test` e o build do WASM.
+- [x] CI (GitHub Actions) rodando `dotnet test` e o build do WASM.
 - [ ] Especificação formal da gramática (EBNF) no README.
 - [ ] Exemplos novos cobrindo cada feature, num diretório `examples/`.
