@@ -30,6 +30,9 @@ public class Compiler
     /// </summary>
     public IReadOnlyList<Diagnostic> Diagnostics { get; private set; } = [];
 
+    /// <summary>The BPM / time signature the last <see cref="Compile"/> used.</summary>
+    public SongConfiguration Configuration => _songConfiguration;
+
     public Compiler(string input)
     {
         _input = input;
@@ -64,7 +67,6 @@ public class Compiler
             if (bpmValue is SpinValue.NumberValue numberValue)
             {
                 _songConfiguration = new SongConfiguration((int)numberValue.Value);
-                Console.WriteLine($"BPM set to: {numberValue.Value}");
             }
             else
             {
@@ -78,7 +80,6 @@ public class Compiler
             if (beatsPerBarValue is SpinValue.NumberValue numberValue)
             {
                 _songConfiguration = new SongConfiguration(_songConfiguration.BPM, (int)numberValue.Value);
-                Console.WriteLine($"Beats per bar: {numberValue.Value}");
             }
             else
             {
@@ -142,19 +143,15 @@ public class Compiler
         switch (statement)
         {
             case AssignmentNode assignment:
-                Console.WriteLine($"Assignment: @{assignment.Name} = {assignment.Value}");
                 // _references[assignment.Name] = assignment.Value;
                 break;
             case BeatNode beat:
-                Console.WriteLine($"Beat: {beat.Name}");
                 CompileBeat(beat);
                 break;
             case MelodyNode melody:
-                Console.WriteLine($"Melody: {melody.Name}");
                 CompileMelody(melody);
                 break;
             case LoopNode loop:
-                Console.WriteLine($"Loop: {loop.Name}");
                 CompileLoop(loop);
                 break;
             case PlayNode play:
@@ -186,10 +183,8 @@ public class Compiler
 
                 for (var i = 0; i < repeatCount; i++)
                 {
-                    Console.WriteLine($"Play: {play.PatternName} (repeat {i + 1}/{repeatCount})");
                     if (isLoop || isBeat || isMelody)
                     {
-                        Console.WriteLine($"Play Loop/Beat/Melody: {play.PatternName}");
                         CompileStatement(beatOrLoop);
                         if (isBeat)
                         {
@@ -285,21 +280,14 @@ public class Compiler
         var rootNote = parameters.ContainsKey("rootNote") ? parameters["rootNote"].AsString() : "C4";
         var sample = parameters.ContainsKey("sample") ? parameters["sample"].AsString() : null;
 
-        var barMs = _songConfiguration.BarDurationMs;
-        Console.WriteLine($"[DEBUG] - {barMs} - {melody.Notes}");
-
         foreach (var note in melody.Notes)
         {
-            var noteNotation = note.NoteName;
-            var startTimeNotation = FractionToTime(note.FractionStart);
-            var durationTimeNotation = startTimeNotation + FractionToTime(note.FractionDuration);
-            // Add parameters in the future
-
-            // Calc metrics here
-            var rate = CalcRate(noteNotation, rootNote);
-            Console.WriteLine($"Add note {noteNotation} - {startTimeNotation}-{durationTimeNotation} {rate}");
-            var melodyEvent = new MelodyEvent(sample ?? "unknown", startTimeNotation, startTimeNotation + durationTimeNotation, noteNotation, rate);
-            _compileResult.Events.Add(melodyEvent);
+            // Note start is relative to wherever this melody is being
+            // played, same as a beat's steps.
+            var start = _currentTime + FractionToTime(note.FractionStart);
+            var duration = FractionToTime(note.FractionDuration);
+            var rate = CalcRate(note.NoteName, rootNote);
+            _compileResult.Events.Add(new MelodyEvent(sample ?? "unknown", start, duration, note.NoteName, rate));
         }
 
         return 0;
@@ -357,20 +345,17 @@ public class Compiler
         var beatsPerBar = _songConfiguration.beatsPerBar;
 
         var sample = parameters.ContainsKey("sample") ? parameters["sample"].AsString() : null;
-        Console.WriteLine($">>>>>>>>>>Compiling Pattern: {beat.Name} - Sample: {sample} - BPM: {bpm} - BeatsPerBar: {beatsPerBar}");
         var grid = parameters.ContainsKey("grid") ? parameters["grid"].AsInt() : 16;
         var beatMs = _songConfiguration.BeatDurationMs;
         var barMs = _songConfiguration.BarDurationMs;
         var stepMs = barMs / grid;
 
-        Console.WriteLine($"Beat: {beat.Name} - Sample: {sample} - Grid: {grid} - Steps: {string.Join(", ", beat.Steps)} - BPM: {bpm}");
 
         foreach (var statement in beat.Steps.OrderBy(x => x))
         {
             var startTime = _currentTime + (int)(stepMs * (statement - 1));
             var soundEvent = new SoundEvent(sample ?? "unknown", startTime, 100);
             _compileResult.Events.Add(soundEvent);
-            Console.WriteLine($"Step: {statement} - Sample: {sample} - StartTime: {startTime}ms");
         }
 
         return (int)_songConfiguration.BarDurationMs;

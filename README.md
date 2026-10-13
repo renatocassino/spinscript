@@ -128,7 +128,7 @@ Every front end drives the same three-stage pipeline in `SpinScript.Core`:
 | Project | What it is | How it uses Core |
 |---|---|---|
 | `SpinScript.Tests` | xUnit test suite (`TokenizerTests`, `ParserTests`, `CompilerTests`) | Calls `Lexer`/`Parser`/`Compiler` directly |
-| `SpinScript` | CLI (`spinscript <file.spin>`), built on `Spectre.Console.Cli` | `RunCommand` parses and analyzes a file, pretty-prints the AST as a tree (`WriteAst`), and lists every error and warning with its line, column and source excerpt; exits with `1` when there are errors |
+| `SpinScript` | CLI (`spinscript <file.spin>`), built on `Spectre.Console.Cli` | `RunCommand` parses, analyzes and compiles a file: lists every error and warning with its line, column and source excerpt, then prints the event timeline (time, bar.beat, sample, note, length). `--ast` also prints the syntax tree. Exits with `1` when there are errors |
 | `SpinScript.Wasm` | `SpinScript.Core` compiled to `browser-wasm` via .NET's WebAssembly SDK | Exposes three `[JSExport]` functions returning JSON: `Parse(source)` (AST), `Check(source)` (every diagnostic, see [Errors and diagnostics](#errors-and-diagnostics)) and `Compile(source)` (event list, or `{error, line, column, diagnostics}` on failure) |
 | `spinscript-web` | Astro site hosting a browser playground | The `<spinscript-editor>` Lit component loads the WASM build at runtime, does its own syntax highlighting (a regex mirroring the VS Code grammar), calls `Compile()`, and schedules the resulting events on the Web Audio API clock to actually play them |
 | `spinscript-vscode` | VS Code extension | Registers the `.spin` language and a TextMate grammar (`syntaxes/spinscript.tmLanguage.json`) for syntax highlighting — no language server, no diagnostics from the real parser (yet) |
@@ -151,6 +151,7 @@ dotnet test SpinScript.Tests
 # run a .spin file (or inline source) through the CLI
 dotnet run --project SpinScript -- song.spin
 dotnet run --project SpinScript -- "@bpm = 120;"
+dotnet run --project SpinScript -- song.spin --ast   # also print the syntax tree
 ```
 
 To build the WebAssembly module and run the browser playground:

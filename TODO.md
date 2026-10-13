@@ -19,10 +19,13 @@ grupo.
       continua nas seções abaixo.)
 - [ ] **`SoundEvent.Velocity`** existe no evento mas não tem como ser
       definido pela linguagem.
-- [ ] **CLI só mostra o AST.** Já mostra todos os diagnósticos, mas o
-      `run` ainda deveria compilar e mostrar a timeline de eventos.
-- [ ] **Mensagens de erro misturam PT e EN** ("Erro léxico" vs.
-      "Error in interpreter"). Escolher um idioma.
+- [x] **CLI só mostra o AST.** Agora compila e mostra a timeline de
+      eventos; a árvore só com `--ast`.
+- [x] **Mensagens de erro misturam PT e EN** ("Erro léxico" vs.
+      "Error in interpreter"). Escolher um idioma. (Inglês, como o resto
+      do Core; comentários no código seguem livres.)
+- [ ] **`play @melodia (repeat=2)`** empilha as repetições no mesmo
+      lugar — só beats e loops avançam o tempo entre repetições.
 
 ## Análise semântica
 

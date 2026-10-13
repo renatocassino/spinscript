@@ -271,4 +271,34 @@ song {
         Assert.Equal([0.0, 500.0, 1250.0, 1875.0], gridTimes);
         Assert.Equal(listTimes, gridTimes);
     }
+
+    [Fact]
+    public void MelodyStartsWhereItIsPlayedAndKeepsItsOwnDuration()
+    {
+        // @bpm=120 => 1 bar = 2000ms. @verse comes after a 1-bar @intro,
+        // so its notes are offset by one bar.
+        var input = """
+@bpm = 120;
+@kick = "kick.wav";
+@piano = "piano.wav";
+
+beat @beat (sample=@kick) { 1 };
+melody @lead (sample=@piano) { C4 0 1/4, E4 1/2 1/4 };
+
+loop @intro (bars=1) { play @beat; }
+loop @verse (bars=1) { play @lead; }
+
+song {
+    play @intro;
+    play @verse;
+}
+""";
+        var compiler = new Compiler(input);
+        compiler.Compile();
+
+        var notes = compiler.compileResult.Events.OfType<MelodyEvent>().ToList();
+
+        Assert.Equal([2000.0, 3000.0], notes.Select(n => n.Time));
+        Assert.Equal([500.0, 500.0], notes.Select(n => n.Duration));
+    }
 }

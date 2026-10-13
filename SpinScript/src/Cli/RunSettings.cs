@@ -7,14 +7,18 @@ using Spectre.Console.Cli;
 public sealed class RunSettings : CommandSettings
 {
     [CommandArgument(0, "[input]")]
-    [Description("Caminho de um arquivo .spin ou código SpinScript direto entre aspas.")]
+    [Description("Path to a .spin file, or SpinScript source in quotes.")]
     public string? Input { get; set; }
+
+    [CommandOption("--ast")]
+    [Description("Also print the parsed syntax tree.")]
+    public bool ShowAst { get; set; }
 
     public override ValidationResult Validate()
     {
         if (string.IsNullOrWhiteSpace(Input))
         {
-            return ValidationResult.Error("Informe um arquivo .spin ou código SpinScript entre aspas. Use --help para ver exemplos.");
+            return ValidationResult.Error("Pass a .spin file or SpinScript source in quotes. Use --help for examples.");
         }
 
         return ValidationResult.Success();

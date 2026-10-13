@@ -95,6 +95,8 @@ loop @groove (bars=1) {
 
         Assert.True(diagnostic.IsError);
         Assert.Contains("'grid'", diagnostic.Message);
+        Assert.DoesNotContain("NumberValue", diagnostic.Message);
+        Assert.DoesNotContain("StringValue", diagnostic.Message);
     }
 
     [Fact]

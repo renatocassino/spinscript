@@ -3,6 +3,7 @@ namespace SpinScript.Cli;
 using Spectre.Console;
 using Spectre.Console.Cli;
 using SpinScript.Analysis;
+using SpinScript.Compiler;
 using SpinScript.Lexer;
 using SpinScript.Parser;
 using SpinScript.Parser.Ast;
@@ -39,7 +40,10 @@ public sealed class RunCommand : Command<RunSettings>
         var program = parsed.Ast;
         var diagnostics = SemanticAnalyzer.Analyze(program);
 
-        WriteAst(program, sourceLabel);
+        if (settings.ShowAst)
+        {
+            WriteAst(program, sourceLabel);
+        }
         WriteDiagnostics(diagnostics, source);
 
         if (diagnostics.Any(diagnostic => diagnostic.IsError))
@@ -47,9 +51,91 @@ public sealed class RunCommand : Command<RunSettings>
             return 1;
         }
 
-        var warnings = diagnostics.Count;
-        AnsiConsole.MarkupLine($"[green]✓[/] {program.Statements.Count} statement(s), {warnings} warning(s).");
+        var compiler = new Compiler(source);
+        try
+        {
+            compiler.Compile();
+        }
+        catch (Exception ex) when (ex is CompilerException or InvalidOperationException)
+        {
+            // The analyzer should catch everything first; this is a backstop.
+            AnsiConsole.MarkupLine($"[red bold]error[/] {Markup.Escape(ex.Message)}");
+            return 1;
+        }
+
+        var events = compiler.compileResult.Events;
+        WriteTimeline(events, compiler.Configuration);
+
+        var length = events.Count == 0 ? 0 : events.Max(EndTime);
+        AnsiConsole.MarkupLine(
+            $"[green]✓[/] {events.Count} event(s), {FormatTime(length)} long at {compiler.Configuration.BPM} BPM, {diagnostics.Count} warning(s).");
         return 0;
+    }
+
+    private static void WriteTimeline(List<Event> events, SongConfiguration configuration)
+    {
+        if (events.Count == 0)
+        {
+            AnsiConsole.MarkupLine("[grey]The song produces no events.[/]");
+            return;
+        }
+
+        var table = new Table().Border(TableBorder.Rounded).BorderColor(Color.Grey);
+        table.AddColumn("[bold]time[/]");
+        table.AddColumn("[bold]bar.beat[/]");
+        table.AddColumn("[bold]sample[/]");
+        table.AddColumn("[bold]note[/]");
+        table.AddColumn(new TableColumn("[bold]length[/]").RightAligned());
+
+        foreach (var @event in events.OrderBy(e => TimeOf(e)))
+        {
+            var time = TimeOf(@event);
+            var (sample, note, length) = @event switch
+            {
+                MelodyEvent melody => (melody.Sample, $"[cyan]{melody.Note}[/]", $"{melody.Duration:0} ms"),
+                SoundEvent sound => (sound.Sample, "", ""),
+                _ => ("?", "", ""),
+            };
+
+            table.AddRow(
+                FormatTime(time),
+                $"[grey]{FormatPosition(time, configuration)}[/]",
+                $"[yellow]{Markup.Escape(ShortSampleName(sample))}[/]",
+                note,
+                length);
+        }
+
+        AnsiConsole.Write(table);
+    }
+
+    private static double TimeOf(Event @event) => @event switch
+    {
+        SoundEvent sound => sound.Time,
+        MelodyEvent melody => melody.Time,
+        _ => 0,
+    };
+
+    private static double EndTime(Event @event) => @event is MelodyEvent melody
+        ? melody.Time + melody.Duration
+        : TimeOf(@event);
+
+    // 1-indexed, like a DAW: the very first beat of the song is "1.1".
+    private static string FormatPosition(double timeMs, SongConfiguration configuration)
+    {
+        var bar = (int)(timeMs / configuration.BarDurationMs);
+        var beat = (timeMs - bar * configuration.BarDurationMs) / configuration.BeatDurationMs;
+        return $"{bar + 1}.{beat + 1:0.##}";
+    }
+
+    private static string FormatTime(double timeMs) =>
+        TimeSpan.FromMilliseconds(timeMs).ToString(@"m\:ss\.fff", System.Globalization.CultureInfo.InvariantCulture);
+
+    // ".../samples/kick_808.wav?v=2" -> "kick_808.wav"
+    private static string ShortSampleName(string sample)
+    {
+        var path = sample.Split('?', '#')[0];
+        var name = path[(path.LastIndexOf('/') + 1)..];
+        return name.Length == 0 ? sample : name;
     }
 
     private static void WriteDiagnostics(IReadOnlyList<Diagnostic> diagnostics, string source)
@@ -87,7 +173,7 @@ public sealed class RunCommand : Command<RunSettings>
         {
             if (!File.Exists(input))
             {
-                AnsiConsole.MarkupLine($"[red]Arquivo não encontrado:[/] {Markup.Escape(input)}");
+                AnsiConsole.MarkupLine($"[red]File not found:[/] {Markup.Escape(input)}");
                 return (string.Empty, string.Empty, false);
             }
 

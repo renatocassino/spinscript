@@ -12,7 +12,9 @@ public record SpinValue
     public record NumberValue(double Value) : SpinValue;
     public record BooleanValue(bool Value) : SpinValue;
 
-    public override string ToString()
+    // sealed: otherwise each nested record synthesizes its own
+    // "StringValue { Value = ... }" ToString and this one is never used.
+    public sealed override string ToString()
     {
         return this switch
         {
