@@ -348,4 +348,82 @@ song {
         Assert.Equal([0.0, 1000.0], notes.Select(n => n.Time));
         Assert.Equal(["C5", "D5"], notes.Select(n => n.Note));
     }
+
+    private const string Parts = """
+@bpm = 120;
+@kick = "kick.wav";
+@hat = "hat.wav";
+@piano = "piano.wav";
+
+beat @kicks (sample=@kick) { 1, 9 }
+beat @hats (sample=@hat) { 3, 7, 11, 15 }
+melody @lead (sample=@piano) { C4 0 1/4 };
+
+loop @groove { play @kicks; play @hats; }
+
+song {
+    play @lead;
+    play @groove (repeat=4);
+}
+""";
+
+    [Fact]
+    public void CompilePartPlaysOnlyThatPartFromTheStart()
+    {
+        var result = new Compiler(Parts).CompilePart("hats");
+
+        var events = result.Events.Cast<SoundEvent>().ToList();
+        Assert.All(events, e => Assert.Equal("hat.wav", e.Sample));
+        Assert.Equal([250.0, 750.0, 1250.0, 1750.0], events.Select(e => e.Time));
+    }
+
+    [Fact]
+    public void CompilePartOfALoopIncludesWhatItPlays()
+    {
+        var result = new Compiler(Parts).CompilePart("groove");
+
+        Assert.Equal(["hat.wav", "kick.wav"], result.Events.Cast<SoundEvent>().Select(e => e.Sample).Distinct().Order());
+        Assert.Equal(0.0, result.Events.Cast<SoundEvent>().Min(e => e.Time));
+    }
+
+    [Fact]
+    public void CompilePartIgnoresErrorsInTheSongAndInPartsItDoesntPlay()
+    {
+        var broken = Parts
+            .Replace("play @lead;", "play @doesNotExist;")
+            .Replace("melody @lead (sample=@piano)", "melody @lead (sample=@nope)");
+
+        Assert.Throws<CompilerException>(() => new Compiler(broken).Compile());
+
+        var result = new Compiler(broken).CompilePart("groove");
+        Assert.NotEmpty(result.Events);
+    }
+
+    [Fact]
+    public void CompilePartStillReportsErrorsInsideThePart()
+    {
+        var broken = Parts.Replace("{ 3, 7, 11, 15 }", "{ 3, 99 }");
+
+        var exception = Assert.Throws<CompilerException>(() => new Compiler(broken).CompilePart("groove"));
+        Assert.Contains(exception.Errors, e => e.Code == "step-out-of-grid");
+    }
+
+    [Fact]
+    public void CompilePartOfAnUnknownNameIsAnError()
+    {
+        var exception = Assert.Throws<CompilerException>(() => new Compiler(Parts).CompilePart("nope"));
+        Assert.Contains("'@nope'", exception.Message);
+    }
+
+    [Fact]
+    public void LengthIsTheTimelineEndNotTheLastEvent()
+    {
+        // 120 BPM: 1 bar = 2000ms. The last hit is at 1500ms, but the part
+        // (and a song playing it twice) lasts whole bars.
+        var source = Parts.Replace("{ 3, 7, 11, 15 }", "{ 13 }");
+
+        Assert.Equal(2000.0, new Compiler(source).CompilePart("hats").Length);
+        Assert.Equal(2000.0, new Compiler(source).CompilePart("groove").Length);
+        Assert.Equal(2000.0 + 4 * 2000.0, new Compiler(source).Compile().Length);
+    }
 }

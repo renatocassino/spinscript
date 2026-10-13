@@ -99,6 +99,14 @@ export class SpinScriptDocs extends LitElement {
         max-width: 68ch;
       }
 
+      kbd {
+        font-family: var(--wa-font-family-code);
+        font-size: 0.85em;
+        padding: 0 0.3em;
+        border: 1px solid var(--wa-color-surface-border);
+        border-radius: var(--wa-border-radius-s);
+      }
+
       code {
         font-family: var(--wa-font-family-code);
         font-size: 0.9em;
@@ -873,6 +881,16 @@ song {
           close the page and come back later. Double-click a tab to rename it.
         </li>
         <li><strong>Examples</strong> opens a ready-made song in a new tab — a good place to start tweaking.</li>
+        <li>
+          The <strong>player bar</strong> shows the song's length before you press play, with one lane per sound.
+          Click (or drag) anywhere on it to play from that point; <kbd>←</kbd>/<kbd>→</kbd> jump 2 seconds when it's
+          focused.
+        </li>
+        <li>
+          <strong>Parts</strong> has a card for every top-level <code>beat</code>, <code>melody</code> and
+          <code>loop</code>. Its ▶ plays just that part — handy for checking one layer, and it works even while
+          the <code>song</code> block has errors.
+        </li>
         <li><strong>Try it</strong> buttons in these docs do the same with each snippet.</li>
         <li>
           <strong>Ctrl + Enter</strong> (<strong>⌘ + Enter</strong> on a Mac) plays or stops the current song.

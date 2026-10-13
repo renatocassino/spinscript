@@ -66,7 +66,7 @@ public sealed class RunCommand : Command<RunSettings>
         var events = compiler.compileResult.Events;
         WriteTimeline(events, compiler.Configuration);
 
-        var length = events.Count == 0 ? 0 : events.Max(EndTime);
+        var length = Math.Max(compiler.compileResult.Length, events.Count == 0 ? 0 : events.Max(EndTime));
         AnsiConsole.MarkupLine(
             $"[green]✓[/] {events.Count} event(s), {FormatTime(length)} long at {compiler.Configuration.BPM} BPM, {diagnostics.Count} warning(s).");
         return 0;

@@ -116,9 +116,12 @@ grupo.
 - [ ] **Editor com CodeMirror 6:** sublinhar o erro no lugar exato,
       autocomplete de `@nomes`/parâmetros, undo/redo e indentação de
       verdade (hoje é um `<textarea>` com realce por cima).
-- [ ] **Playground (resto):** piano roll / grid visual sincronizado com o
-      código, cursor seguindo a reprodução, compartilhar música por URL,
-      exportar/importar `.spin`.
+- [x] **Player com linha do tempo** (seek clicando, faixas por som) e um
+      card por beat/melody/loop com play só daquela parte.
+- [ ] **Playground (resto):** piano roll / grid editável sincronizado com
+      o código, destacar no editor a linha que está tocando, loop de um
+      trecho (A–B), compartilhar música por URL, exportar/importar `.spin`,
+      marcar as seções do `song` (intro, verso...) na linha do tempo.
 - [ ] **Aviso de "loop depois de melody":** num mesmo loop, `play @chords;
       play @drums;` com `@drums` sendo um loop toca a bateria *depois* dos
       acordes. Os exemplos tropeçaram nisso; vale um warning do analisador.

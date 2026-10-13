@@ -17,4 +17,7 @@ public static partial class Exports
 
     [JSExport]
     public static string Compile(string source) => SpinScriptJson.Compile(source);
+
+    [JSExport]
+    public static string CompilePart(string source, string name) => SpinScriptJson.CompilePart(source, name);
 }

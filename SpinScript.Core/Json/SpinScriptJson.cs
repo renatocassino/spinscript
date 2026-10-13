@@ -23,7 +23,7 @@ using SpinScript.Parser.Ast;
 /// <code>
 /// Parse   → { "type": "program", "statements": [ ... ] }
 /// Check   → [ { "severity": "error" | "warning", "code", "message", "line", "column" }, ... ]
-/// Compile → { "events": [ { "type": "sound", "sample", "time", "velocity" }
+/// Compile, CompilePart → { "events": [ { "type": "sound", "sample", "time", "velocity" }
 ///                       | { "type": "melody", "sample", "time", "duration", "note", "rate" } ],
 ///             "duration": totalMs }
 /// error   → { "error": "first message", "line": 0, "column": 4,
@@ -90,11 +90,20 @@ public static class SpinScriptJson
         });
     }
 
-    public static string Compile(string source)
+    public static string Compile(string source) => CompileWith(source, compiler => compiler.Compile());
+
+    /// <summary>
+    /// Same shape as <see cref="Compile"/>, for one top-level beat, melody or
+    /// loop played on its own (see <see cref="Compiler.CompilePart"/>).
+    /// </summary>
+    public static string CompilePart(string source, string name) =>
+        CompileWith(source, compiler => compiler.CompilePart(name));
+
+    private static string CompileWith(string source, Func<Compiler, CompileResult> compile)
     {
         try
         {
-            var result = new Compiler(source).Compile();
+            var result = compile(new Compiler(source));
             return Write(writer => WriteCompileResult(writer, result));
         }
         catch (LexerException ex)
@@ -199,7 +208,8 @@ public static class SpinScriptJson
         }
 
         writer.WriteEndArray();
-        writer.WriteNumber("duration", end);
+        // Whichever ends later: the timeline itself, or a note ringing past it.
+        writer.WriteNumber("duration", Math.Max(end, result.Length));
         writer.WriteEndObject();
     }
 

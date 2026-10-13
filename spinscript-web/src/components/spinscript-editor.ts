@@ -11,7 +11,11 @@ import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
 import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 
 import './spinscript-docs';
+import './spinscript-parts';
+import './spinscript-timeline';
+import type { Part } from './spinscript-parts';
 import { examples } from '../lib/examples';
+import { Player, type PlayableEvent } from '../lib/player';
 import { highlightSpinScript, lineNumbers, tokenStyles } from '../lib/highlight';
 import {
   NEW_SONG_CODE,
@@ -24,22 +28,29 @@ import {
   type SongLibrary,
 } from '../lib/songs';
 
-// Mirrors the Compile() output of SpinScript.Core/Json/SpinScriptJson.cs:
-// `type` tells the two event shapes apart, and `rate` only exists on melody
-// events.
-interface SpinScriptEvent {
-  type: 'sound' | 'melody';
-  time: number;
-  sample: string;
-  velocity?: number;
-  duration?: number;
-  note?: string;
-  rate?: number;
+// Mirrors the Compile()/CompilePart() output of
+// SpinScript.Core/Json/SpinScriptJson.cs.
+interface CompileResult {
+  events: PlayableEvent[];
+  duration: number;
 }
 
-interface CompileResult {
-  events: SpinScriptEvent[];
+// What the player bar is showing: the whole song, or one part of it.
+interface Timeline {
+  part: string | null;
+  events: PlayableEvent[];
   duration: number;
+}
+
+// The bits of Parse()'s AST the part cards need.
+interface AstStatement {
+  type: string;
+  name?: string;
+  line?: number;
+  parameters?: Record<string, { type: string; value: unknown }>;
+  steps?: number[];
+  notes?: unknown[];
+  statements?: AstStatement[];
 }
 
 // Parse() and Compile() never throw across the JS boundary: failures come
@@ -65,6 +76,7 @@ interface SpinScriptExports {
   Parse(source: string): string;
   Check(source: string): string;
   Compile(source: string): string;
+  CompilePart(source: string, name: string): string;
 }
 
 const THEME_STORAGE_KEY = 'spintheme';
@@ -82,6 +94,9 @@ export class SpinScriptEditor extends LitElement {
     theme: { state: true },
     docsOpen: { state: true },
     renamingId: { state: true },
+    timeline: { state: true },
+    parts: { state: true },
+    loading: { state: true },
   };
 
   declare library: SongLibrary;
@@ -92,13 +107,14 @@ export class SpinScriptEditor extends LitElement {
   declare theme: 'light' | 'dark';
   declare docsOpen: boolean;
   declare renamingId: string | null;
+  declare timeline: Timeline | null;
+  declare parts: Part[];
+  declare loading: boolean;
 
   #spinscript: SpinScriptExports | null = null;
-  #audioContext: AudioContext | null = null;
-  #sampleBufferCache = new Map<string, AudioBuffer>();
-  #pendingEvents: SpinScriptEvent[] = [];
-  #activeSources = new Set<AudioBufferSourceNode>();
-  #schedulerTimer: ReturnType<typeof setTimeout> | null = null;
+  #player = new Player();
+  // Which part the player bar follows; null = the whole song.
+  #timelinePart: string | null = null;
   #idleTimer: ReturnType<typeof setTimeout> | null = null;
   #unwatchLibrary: (() => void) | null = null;
 
@@ -318,16 +334,38 @@ export class SpinScriptEditor extends LitElement {
         outline: none;
       }
 
-      .toolbar {
+      .editor-card::part(footer) {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wa-space-xs);
+      }
+
+      .player {
         display: flex;
         align-items: center;
-        justify-content: space-between;
         gap: var(--wa-space-m);
+      }
+
+      .play-button {
+        flex-shrink: 0;
+        min-width: 7.5rem;
+      }
+
+      spinscript-timeline {
+        flex: 1;
+        min-width: 0;
       }
 
       .hint {
         color: var(--wa-color-text-quiet);
         font-size: var(--wa-font-size-xs);
+      }
+
+      @media (max-width: 600px) {
+        .player {
+          flex-direction: column;
+          align-items: stretch;
+        }
       }
 
       kbd {
@@ -367,6 +405,10 @@ export class SpinScriptEditor extends LitElement {
     this.ready = false;
     this.docsOpen = false;
     this.renamingId = null;
+    this.timeline = null;
+    this.parts = [];
+    this.loading = false;
+    this.#player.addEventListener('statechange', () => (this.isPlaying = this.#player.playing));
     // The inline script in index.astro already applied wa-light/wa-dark to
     // <html> before this component upgraded, so just read it back.
     this.theme = document.documentElement.classList.contains('wa-dark') ? 'dark' : 'light';
@@ -389,7 +431,7 @@ export class SpinScriptEditor extends LitElement {
     this.#unwatchLibrary?.();
     window.removeEventListener('keydown', this.#handleKeydown);
     window.removeEventListener('pagehide', this.#flush);
-    this.#stop();
+    this.#player.stop();
   }
 
   async #init(): Promise<void> {
@@ -431,7 +473,7 @@ export class SpinScriptEditor extends LitElement {
   #select(id: string): void {
     if (id === this.library.activeId) return;
     this.#flush();
-    this.#stop();
+    this.#player.stop();
     this.#commit({ ...this.library, activeId: id });
     this.error = '';
     this.#check();
@@ -439,7 +481,7 @@ export class SpinScriptEditor extends LitElement {
 
   #openSong(name: string, code: string): void {
     this.#flush();
-    this.#stop();
+    this.#player.stop();
     const song = createSong(uniqueName(name, this.library.songs), code);
     this.#commit({ activeId: song.id, songs: [...this.library.songs, song] });
     this.error = '';
@@ -460,7 +502,7 @@ export class SpinScriptEditor extends LitElement {
     let songs = this.library.songs.filter((s) => s.id !== id);
     if (songs.length === 0) songs = [createSong('Untitled', NEW_SONG_CODE)];
     const activeId = id === this.library.activeId ? songs[Math.min(index, songs.length - 1)].id : this.library.activeId;
-    if (id === this.library.activeId) this.#stop();
+    if (id === this.library.activeId) this.#player.stop();
     this.#commit({ activeId, songs });
     this.#check();
   }
@@ -521,14 +563,63 @@ export class SpinScriptEditor extends LitElement {
     this.#check();
   };
 
+  // Re-lints the active song and refreshes what depends on it: the part
+  // cards and the player bar (so the total time shows before pressing play).
   #check(): void {
     if (!this.#spinscript) return;
+    const code = this.#activeSong.code;
     try {
-      this.diagnostics = JSON.parse(this.#spinscript.Check(this.#activeSong.code)) as Diagnostic[];
+      this.diagnostics = JSON.parse(this.#spinscript.Check(code)) as Diagnostic[];
+      this.parts = this.#readParts(code);
+      if (this.#timelinePart && !this.parts.some((p) => p.name === this.#timelinePart)) this.#timelinePart = null;
+      this.timeline = this.#compile(this.#timelinePart) ?? (this.#timelinePart ? this.#compile(null) : null);
+      if (this.timeline?.part !== this.#timelinePart) this.#timelinePart = null;
     } catch (e) {
       console.error(e);
       this.error = (e as Error).message;
     }
+  }
+
+  /** The song (part = null) or one part, compiled; null if it has errors. */
+  #compile(part: string | null): Timeline | null {
+    const code = this.#activeSong.code;
+    const json = part === null ? this.#spinscript!.Compile(code) : this.#spinscript!.CompilePart(code, part);
+    const parsed: unknown = JSON.parse(json);
+    if (isCompileError(parsed)) return null;
+    const result = parsed as CompileResult;
+    return { part, events: result.events, duration: result.duration };
+  }
+
+  #readParts(code: string): Part[] {
+    const ast = JSON.parse(this.#spinscript!.Parse(code)) as { statements?: AstStatement[] };
+    if (!ast.statements) return this.parts; // syntax error: keep the last good cards
+
+    const number = (s: AstStatement, key: string) => {
+      const value = s.parameters?.[key];
+      return value?.type === 'number' ? (value.value as number) : null;
+    };
+
+    return ast.statements.flatMap((s): Part[] => {
+      if (!s.name) return [];
+      const line = s.line ?? 0;
+      switch (s.type) {
+        case 'beat': {
+          const hits = s.steps?.length ?? 0;
+          return [{ name: s.name, kind: 'beat', line, detail: `${hits} hit${hits === 1 ? '' : 's'} · grid ${number(s, 'grid') ?? 16}` }];
+        }
+        case 'melody': {
+          const notes = s.notes?.length ?? 0;
+          return [{ name: s.name, kind: 'melody', line, detail: `${notes} note${notes === 1 ? '' : 's'}` }];
+        }
+        case 'loop': {
+          const bars = number(s, 'bars');
+          const items = s.statements?.length ?? 0;
+          return [{ name: s.name, kind: 'loop', line, detail: bars !== null ? `${bars} bar${bars === 1 ? '' : 's'}` : `${items} item${items === 1 ? '' : 's'}` }];
+        }
+        default:
+          return [];
+      }
+    });
   }
 
   #handleScroll(event: Event): void {
@@ -581,119 +672,53 @@ export class SpinScriptEditor extends LitElement {
   // Playback
   // ---------------------------------------------------------------------
 
-  #ensureAudioContext(): AudioContext {
-    this.#audioContext ??= new AudioContext();
-    return this.#audioContext;
-  }
-
-  async #loadSample(url: string): Promise<AudioBuffer> {
-    const cached = this.#sampleBufferCache.get(url);
-    if (cached) return cached;
-
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Couldn't load sample "${url}" (HTTP ${response.status}).`);
-    }
-    const audioBuffer = await this.#ensureAudioContext().decodeAudioData(await response.arrayBuffer());
-    this.#sampleBufferCache.set(url, audioBuffer);
-    return audioBuffer;
-  }
-
-  async #loadSamples(urls: string[]): Promise<Map<string, AudioBuffer>> {
-    const buffers = await Promise.all(urls.map((url) => this.#loadSample(url)));
-    return new Map(urls.map((url, i) => [url, buffers[i]]));
-  }
-
-  // Schedules `buffer` on the AudioContext clock (sample-accurate, unlike
-  // setTimeout). `rate` is a melody note's playback rate; omit it for drums.
-  #playSample(buffer: AudioBuffer, delayMs = 0, rate?: number): void {
-    const audioContext = this.#ensureAudioContext();
-    const source = audioContext.createBufferSource();
-    source.buffer = buffer;
-    if (rate !== undefined) {
-      source.playbackRate.value = rate;
-    }
-    source.connect(audioContext.destination);
-    source.onended = () => this.#activeSources.delete(source);
-    this.#activeSources.add(source);
-    source.start(audioContext.currentTime + delayMs / 1000);
-  }
-
+  // Play button / Ctrl+Enter: the whole song from the top, or stop.
   async #togglePlay(): Promise<void> {
     if (this.isPlaying) {
-      this.#stop();
-    } else {
-      await this.#play();
+      this.#player.stop();
+      return;
     }
-  }
-
-  #stop(): void {
-    if (this.#schedulerTimer) clearTimeout(this.#schedulerTimer);
-    this.#schedulerTimer = null;
-    this.#pendingEvents = [];
-    for (const source of this.#activeSources) {
-      try {
-        source.stop();
-      } catch {
-        // Already stopped.
-      }
-    }
-    this.#activeSources.clear();
-    this.isPlaying = false;
-  }
-
-  async #play(): Promise<void> {
     this.#flush();
+    if (this.#timelinePart !== null) {
+      this.#timelinePart = null;
+      this.#check();
+    }
+    await this.#playFrom(0);
+  }
+
+  async #playPart(event: CustomEvent<{ name: string }>): Promise<void> {
+    this.#flush();
+    this.#timelinePart = event.detail.name;
+    this.#check();
+    if (this.timeline?.part !== event.detail.name) {
+      // The part doesn't compile on its own: show why.
+      const parsed: unknown = JSON.parse(this.#spinscript!.CompilePart(this.#activeSong.code, event.detail.name));
+      this.error = isCompileError(parsed) ? parsed.error : '';
+      return;
+    }
+    await this.#playFrom(0);
+  }
+
+  // Clicking the player bar: stop and start again from that point.
+  async #seek(event: CustomEvent<{ ms: number }>): Promise<void> {
+    this.#flush();
+    await this.#playFrom(event.detail.ms);
+  }
+
+  async #playFrom(ms: number): Promise<void> {
     this.error = '';
-    if (!this.#spinscript) return;
+    const timeline = this.timeline;
+    if (!timeline || timeline.events.length === 0) return;
 
+    this.loading = true;
     try {
-      const parsed: unknown = JSON.parse(this.#spinscript.Compile(this.#activeSong.code));
-      if (isCompileError(parsed)) {
-        throw new Error(parsed.error);
-      }
-
-      const result = parsed as CompileResult;
-      const buffers = await this.#loadSamples([...new Set(result.events.map((e) => e.sample))]);
-
-      const audioContext = this.#ensureAudioContext();
-      await audioContext.resume();
-
-      this.isPlaying = true;
-      this.#pendingEvents = [...result.events];
-      const startAudioTime = audioContext.currentTime;
-      const lookaheadMs = 300;
-      const schedulerIntervalMs = 25;
-
-      const scheduleNext = (): void => {
-        const now = audioContext.currentTime;
-
-        this.#pendingEvents = this.#pendingEvents.filter((event) => {
-          const timeToStart = (startAudioTime + event.time / 1000 - now) * 1000;
-          if (timeToStart >= lookaheadMs) return true;
-
-          const buffer = buffers.get(event.sample);
-          if (buffer) {
-            this.#playSample(buffer, Math.max(timeToStart, 0), event.type === 'melody' ? event.rate : undefined);
-          }
-          return false;
-        });
-
-        if (this.#pendingEvents.length === 0) {
-          // Everything is scheduled; flip back to "Play" when the song ends.
-          const remainingMs = Math.max(0, startAudioTime * 1000 + result.duration - now * 1000);
-          this.#schedulerTimer = setTimeout(() => this.#stop(), remainingMs + 200);
-          return;
-        }
-
-        this.#schedulerTimer = setTimeout(scheduleNext, schedulerIntervalMs);
-      };
-
-      scheduleNext();
+      await this.#player.play(timeline.events, timeline.duration, ms);
     } catch (e) {
       console.error(e);
       this.error = (e as Error).message;
-      this.#stop();
+      this.#player.stop();
+    } finally {
+      this.loading = false;
     }
   }
 
@@ -807,17 +832,35 @@ export class SpinScriptEditor extends LitElement {
           : null}
         ${this.#renderDiagnostics('error', 'danger')} ${this.#renderDiagnostics('warning', 'warning')}
 
-        <div slot="footer" class="toolbar">
-          <span class="hint">Saved in this browser · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to play</span>
+        <spinscript-parts
+          .parts=${this.parts}
+          .playing=${this.isPlaying ? this.timeline?.part ?? null : null}
+          ?disabled=${!this.ready || this.loading}
+          @play-part=${this.#playPart}
+          @stop-part=${() => this.#player.stop()}
+        ></spinscript-parts>
+
+        <div slot="footer" class="player">
           <wa-button
+            class="play-button"
             variant=${this.isPlaying ? 'neutral' : 'brand'}
             appearance="accent"
+            ?loading=${this.loading}
             ?disabled=${!this.ready || (hasErrors && !this.isPlaying)}
             @click=${this.#togglePlay}
+            aria-label=${this.isPlaying ? 'Stop' : 'Play the song'}
           >
-            ${this.isPlaying ? 'Stop' : 'Play'}
+            ${this.isPlaying ? '■ Stop' : '▶ Play'}
           </wa-button>
+          <spinscript-timeline
+            .player=${this.#player}
+            .events=${this.timeline?.events ?? []}
+            .duration=${this.timeline?.duration ?? 0}
+            label=${this.timeline?.part ? `Playing only @${this.timeline.part}` : hasErrors ? 'Fix the errors above to play' : 'Song — click anywhere to play from there'}
+            @seek=${this.#seek}
+          ></spinscript-timeline>
         </div>
+        <div slot="footer" class="hint">Saved in this browser · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> plays the song</div>
       </wa-card>
 
       <wa-drawer

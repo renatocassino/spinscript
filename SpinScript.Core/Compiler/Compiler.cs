@@ -53,15 +53,97 @@ public class Compiler
     /// lists every problem at once; the positioned errors thrown further
     /// down are a backstop for anything it doesn't catch.
     /// </summary>
-    public CompileResult Compile()
+    public CompileResult Compile() => Compile(ParseOrThrow());
+
+    /// <summary>
+    /// Compiles a single top-level beat, melody or loop on its own, as if the
+    /// song were just <c>song { play @name; }</c> — for previewing one part.
+    /// The real <c>song</c> block is ignored, so problems inside it don't get
+    /// in the way; problems in the part itself (or anything it plays) do.
+    /// </summary>
+    public CompileResult CompilePart(string name)
+    {
+        var program = ParseOrThrow();
+
+        var exists = program.Statements.Any(statement => statement switch
+        {
+            BeatNode beat => beat.Name == name,
+            MelodyNode melody => melody.Name == name,
+            LoopNode loop => loop.Name == name,
+            _ => false,
+        });
+        if (!exists)
+        {
+            throw new CompilerException($"There's no top-level beat, melody or loop called '@{name}'.", 0, 0);
+        }
+
+        // Keep the variables and only the declarations this part reaches, so
+        // a broken beat elsewhere in the file doesn't block the preview.
+        var reachable = ReachableFrom(name, program);
+        var statements = program.Statements
+            .Where(statement => statement switch
+            {
+                AssignmentNode => true,
+                BeatNode beat => reachable.Contains(beat.Name),
+                MelodyNode melody => reachable.Contains(melody.Name),
+                LoopNode loop => reachable.Contains(loop.Name),
+                _ => false,
+            })
+            .Append(new SongNode([], [new PlayNode(name, [], 0, 0)], 0, 0))
+            .ToList();
+
+        return Compile(new ProgramNode(statements));
+    }
+
+    // Names of the top-level declarations `name` plays, directly or through
+    // loops (including loops declared inline), plus `name` itself.
+    private static HashSet<string> ReachableFrom(string name, ProgramNode program)
+    {
+        var loops = program.Statements.OfType<LoopNode>().GroupBy(loop => loop.Name).ToDictionary(g => g.Key, g => g.First());
+        var reachable = new HashSet<string> { name };
+        var pending = new Stack<string>([name]);
+
+        while (pending.Count > 0)
+        {
+            if (!loops.TryGetValue(pending.Pop(), out var loop))
+            {
+                continue;
+            }
+
+            var body = new Stack<AstNode>(loop.Statements);
+            while (body.Count > 0)
+            {
+                switch (body.Pop())
+                {
+                    case PlayNode play when reachable.Add(play.PatternName):
+                        pending.Push(play.PatternName);
+                        break;
+                    case LoopNode inner:
+                        foreach (var statement in inner.Statements)
+                        {
+                            body.Push(statement);
+                        }
+                        break;
+                }
+            }
+        }
+
+        return reachable;
+    }
+
+    private ProgramNode ParseOrThrow()
     {
         var ast = new Parser(_input).Parse();
         if (ast.HasErrors)
         {
             throw new CompilerException(ast.Errors.Select(Diagnostic.FromParserException).ToList());
         }
+        return ast.Ast;
+    }
 
-        var diagnostics = SemanticAnalyzer.Analyze(ast.Ast);
+    private CompileResult Compile(ProgramNode program)
+    {
+        var diagnostics = SemanticAnalyzer.Analyze(program);
         if (diagnostics.Any(diagnostic => diagnostic.IsError))
         {
             throw new CompilerException(diagnostics);
@@ -69,12 +151,12 @@ public class Compiler
         Diagnostics = diagnostics;
 
         Reset();
-        RegisterStatements(ast.Ast);
+        RegisterStatements(program);
         UpdateConfiguration();
         CompileStatements();
 
         // Stable sort: events at the same instant keep their source order.
-        _compileResult = new CompileResult([.. _compileResult.Events.OrderBy(EventTime)]);
+        _compileResult = new CompileResult([.. _compileResult.Events.OrderBy(EventTime)], _currentTime);
         return _compileResult;
     }
 

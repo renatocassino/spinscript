@@ -9,7 +9,12 @@ public record SoundEvent(string Sample, double Time, int Velocity) : Event;
 // at the melody's rootNote) up or down to `Note`: 2 = one octave up.
 public record MelodyEvent(string Sample, double Time, double Duration, string Note, double Rate) : Event;
 
-public record CompileResult(List<Event> Events);
+/// <param name="Length">
+/// Where the song's timeline ends, in ms — its musical length, which can be
+/// later than the last event (a one-bar loop whose last hit is on beat 3
+/// still lasts the whole bar).
+/// </param>
+public record CompileResult(List<Event> Events, double Length = 0);
 
 // ---------------------------------------------------------------------------
 // TIMING VOCABULARY
