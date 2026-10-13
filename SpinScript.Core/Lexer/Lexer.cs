@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.IO.Pipelines;
 
 namespace SpinScript.Lexer;
 
@@ -58,6 +57,18 @@ public class Lexer
             if (char.IsDigit(currentChar))
             {
                 AddNumberToken();
+                continue;
+            }
+
+            // A beat grid can also start with a rest ('.', '-') or a bar
+            // separator ('|'), e.g. `{ ..x.|x... }`; none of those characters
+            // means anything else on its own, so this is unambiguous.
+            if (currentChar is '.' or '-' or '|')
+            {
+                if (!TryAddPatternGrid())
+                {
+                    throw new LexerException($"Unexpected character '{currentChar}'", _line, _column);
+                }
                 continue;
             }
 
@@ -171,7 +182,7 @@ public class Lexer
 
     private static bool IsIdentifierChar(char c) => char.IsLetterOrDigit(c) || c == '_' || c == '#';
     private static bool IsNoteChar(char c) => char.IsLetterOrDigit(c) || c == '#';
-    private static bool IsPatternGridChar(char c) => char.IsLetterOrDigit(c) || c == '|' || c == '.';
+    private static bool IsPatternGridChar(char c) => char.IsLetterOrDigit(c) || c == '|' || c == '.' || c == '-';
 
     private (string Word, int StartIndex, int StartLine, int StartColumn) ScanWord(Func<char, bool> predicate)
     {
@@ -229,7 +240,7 @@ public class Lexer
 
     private bool TryAddKeyword() => TryAddFromDictionary(Keywords, IsIdentifierChar);
 
-    private bool TryAddNote() => TryAddWordToken(IsNoteChar, CheckIsNote, TokenType.NOTE);
+    private bool TryAddNote() => TryAddWordToken(IsNoteChar, IsNote, TokenType.NOTE);
 
     /// <summary>
     /// A note immediately followed by <c>:</c> and a quality, e.g.
@@ -261,7 +272,7 @@ public class Lexer
 
     private bool TryAddPatternGrid() => TryAddWordToken(IsPatternGridChar, CheckIsPatternGrid, TokenType.PATTERN_GRID);
 
-    private bool CheckIsPatternGrid(string pattern)
+    private static bool CheckIsPatternGrid(string pattern)
     {
         if (pattern.Length == 0)
         {
@@ -286,7 +297,13 @@ public class Lexer
         _tokens.Add(new Token(TokenType.IDENT, word, startLine, startColumn));
     }
 
-    public bool CheckIsNote(string note)
+    public bool CheckIsNote(string note) => IsNote(note);
+
+    /// <summary>
+    /// A note name: a letter A–G, an optional '#' or 'b', and an optional
+    /// single octave digit (C, C4, Db, F#9).
+    /// </summary>
+    public static bool IsNote(string note)
     {
         if (note.Length == 0)
         {
@@ -373,6 +390,17 @@ public class Lexer
                 }
                 throw new LexerException("Invalid conversion to double", startLine, startColumn);
             case "fraction":
+                var parts = number.Split('/');
+                if (parts.Length != 2 || parts[0].Length == 0 || parts[1].Length == 0 || number.Contains('.'))
+                {
+                    throw new LexerException($"Invalid fraction '{number}'. Expected something like '1/4'.", startLine, startColumn);
+                }
+
+                if (parts[1].All(c => c == '0'))
+                {
+                    throw new LexerException($"Invalid fraction '{number}': the denominator can't be zero.", startLine, startColumn);
+                }
+
                 _tokens.Add(new Token(TokenType.FRACTION, number, startLine, startColumn));
                 break;
             default:

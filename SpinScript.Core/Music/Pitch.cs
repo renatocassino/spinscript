@@ -14,9 +14,14 @@ public static class Pitch
         ['G'] = 7, ['A'] = 9, ['B'] = 11,
     };
 
+    public const int DefaultOctave = 4;
+
     private static readonly string[] SharpNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
-    /// <summary>Expects a note with an octave, e.g. <c>C4</c>, <c>G#5</c>, <c>Db3</c>.</summary>
+    /// <summary>
+    /// <c>C4</c>, <c>G#5</c>, <c>Db3</c>... The octave is optional and
+    /// defaults to 4, so <c>Db</c> is the same as <c>Db4</c>.
+    /// </summary>
     public static int ToMidi(string note)
     {
         var offset = LetterOffsets[note[0]];
@@ -25,7 +30,9 @@ public static class Pitch
         if (note.Length > 1 && note[1] == '#') { offset += 1; octaveIndex = 2; }
         else if (note.Length > 1 && note[1] == 'b') { offset -= 1; octaveIndex = 2; }
 
-        var octave = int.Parse(note[octaveIndex..], CultureInfo.InvariantCulture);
+        var octave = octaveIndex < note.Length
+            ? int.Parse(note[octaveIndex..], CultureInfo.InvariantCulture)
+            : DefaultOctave;
 
         return (octave + 1) * 12 + offset;
     }

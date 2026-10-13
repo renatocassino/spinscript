@@ -428,7 +428,7 @@ play @song1 (bpm=120, volume=80);
 
         var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
         Assert.Equal("minhaAutoria", melody.Name);
-        Assert.Equal("@piano", melody.Parameters["sample"].AsString());
+        Assert.Equal(new SpinValue.ReferenceValue("piano"), melody.Parameters["sample"]);
         Assert.Equal(7, melody.Notes.Count);
 
         Assert.Equal(["G5", "F5", "G5", "E5", "G5", "D5", "G5"], melody.Notes.Select(n => n.NoteName));
@@ -746,6 +746,16 @@ play @song1 (bpm=120, volume=80);
     }
 
     [Fact]
+    public void ParseNamedChordWithoutOctaveDefaultsToOctaveFour()
+    {
+        var program = new Parser("melody @m { A:m 0 1 };").Parse();
+
+        Assert.False(program.HasErrors);
+        var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
+        Assert.Equal(["A", "C5", "E5"], melody.Notes.Select(n => n.NoteName)); // A = A4
+    }
+
+    [Fact]
     public void ParseRelativeStartAfterChordIsRelativeToTheChordsEnd()
     {
         var program = new Parser("melody @m { C4:maj 1/4 1/2, D4 +0 1/4 };").Parse();
@@ -756,7 +766,6 @@ play @song1 (bpm=120, volume=80);
 
     [Theory]
     [InlineData("C4:maj8 0 1", "Unknown chord quality 'maj8'")]
-    [InlineData("C:m 0 1", "needs an octave")]
     [InlineData("[] 0 1", "at least one note")]
     public void ParseInvalidChordReportsError(string entry, string message)
     {
@@ -770,7 +779,7 @@ play @song1 (bpm=120, volume=80);
     [Fact]
     public void ParseMelodyReportsEveryInvalidNoteNotJustTheFirst()
     {
-        var program = new Parser("melody @m { C4:x 0 1, E4 1 1, C:m 2 1, G4 3 1 };").Parse();
+        var program = new Parser("melody @m { C4:x 0 1, E4 1 1, [] 2 1, G4 3 1 };").Parse();
 
         Assert.Equal(2, program.Errors.Count);
         var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);

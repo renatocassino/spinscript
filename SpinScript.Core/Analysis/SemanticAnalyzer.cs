@@ -1,6 +1,5 @@
 namespace SpinScript.Analysis;
 
-using System.Text.RegularExpressions;
 using SpinScript.Lexer;
 using SpinScript.Parser;
 using SpinScript.Parser.Ast;
@@ -14,11 +13,13 @@ using SpinScript.Parser.Ast;
 /// them. Errors mean the compiler would crash or produce nonsense; warnings
 /// mean the file compiles but something in it has no effect.
 /// </summary>
-public sealed partial class SemanticAnalyzer
+public sealed class SemanticAnalyzer
 {
     private enum ParamKind
     {
         PositiveInt,
+        WholeNumber,
+        PositiveNumber,
         String,
         Note,
     }
@@ -26,9 +27,10 @@ public sealed partial class SemanticAnalyzer
     // What the compiler actually reads from each construct. Anything else
     // parses fine but is ignored, which is worth a warning.
     private static readonly Dictionary<string, ParamKind> BeatParams = new() { ["sample"] = ParamKind.String, ["grid"] = ParamKind.PositiveInt };
-    private static readonly Dictionary<string, ParamKind> MelodyParams = new() { ["sample"] = ParamKind.String, ["rootNote"] = ParamKind.Note };
-    private static readonly Dictionary<string, ParamKind> LoopParams = new() { ["bars"] = ParamKind.PositiveInt };
-    private static readonly Dictionary<string, ParamKind> PlayParams = new() { ["repeat"] = ParamKind.PositiveInt };
+    // `instrument` is the compiler's alias for a melody's `sample`.
+    private static readonly Dictionary<string, ParamKind> MelodyParams = new() { ["sample"] = ParamKind.String, ["instrument"] = ParamKind.String, ["rootNote"] = ParamKind.Note };
+    private static readonly Dictionary<string, ParamKind> LoopParams = new() { ["bars"] = ParamKind.PositiveNumber };
+    private static readonly Dictionary<string, ParamKind> PlayParams = new() { ["repeat"] = ParamKind.WholeNumber };
     private static readonly Dictionary<string, ParamKind> NoParams = new();
 
     // Parameter names people reach for that mean something else here.
@@ -189,13 +191,9 @@ public sealed partial class SemanticAnalyzer
     {
         if (_variables.TryGetValue("bpm", out var bpm))
         {
-            if (bpm.Value is not SpinValue.NumberValue { Value: > 0 } number)
+            if (bpm.Value is not SpinValue.NumberValue { Value: > 0 })
             {
                 _diagnostics.Add(Diagnostic.Error("invalid-config", $"'@bpm' must be a number greater than 0, got {bpm.Value}.", bpm.Line, bpm.Column));
-            }
-            else if (number.Value != Math.Floor(number.Value))
-            {
-                _diagnostics.Add(Diagnostic.Warning("invalid-config", $"'@bpm' is rounded down to {(int)number.Value}; fractional BPM isn't supported yet.", bpm.Line, bpm.Column));
             }
         }
 
@@ -250,7 +248,7 @@ public sealed partial class SemanticAnalyzer
     {
         var owner = $"beat '@{beat.Name}'";
         var parameters = CheckParameters(beat.Parameters, BeatParams, owner, beat.Line, beat.Column);
-        WarnIfMissingSample(beat.Parameters, owner, beat.Line, beat.Column);
+        RequireSample(beat.Parameters, owner, beat.Line, beat.Column);
 
         var grid = parameters.TryGetValue("grid", out var gridValue) && IsPositiveInt(gridValue)
             ? (int)gridValue.AsNumber()
@@ -278,17 +276,10 @@ public sealed partial class SemanticAnalyzer
     {
         var owner = $"melody '@{melody.Name}'";
         CheckParameters(melody.Parameters, MelodyParams, owner, melody.Line, melody.Column);
-        WarnIfMissingSample(melody.Parameters, owner, melody.Line, melody.Column);
+        RequireSample(melody.Parameters, owner, melody.Line, melody.Column);
 
         foreach (var note in melody.Notes)
         {
-            if (!HasOctave(note.NoteName))
-            {
-                _diagnostics.Add(Diagnostic.Error("invalid-note",
-                    $"Note '{note.NoteName}' needs an octave to be played, e.g. '{note.NoteName}4'.",
-                    note.Line, note.Column));
-            }
-
             CheckTime(note.FractionStart, "start", note);
             if (CheckTime(note.FractionDuration, "duration", note) == 0)
             {
@@ -394,9 +385,12 @@ public sealed partial class SemanticAnalyzer
             var problem = kind switch
             {
                 ParamKind.PositiveInt when !IsPositiveInt(value) => "must be a whole number of at least 1",
+                ParamKind.WholeNumber when value is not SpinValue.NumberValue { Value: >= 0 } whole || whole.Value != Math.Floor(whole.Value) =>
+                    "must be a whole number of at least 0",
+                ParamKind.PositiveNumber when value is not SpinValue.NumberValue { Value: > 0 } => "must be a number greater than 0",
                 ParamKind.String when value is not SpinValue.StringValue => "must be a string",
-                ParamKind.Note when value is not SpinValue.StringValue { Value: var note } || !IsNote(note) || !HasOctave(note) =>
-                    "must be a note with an octave, like \"C4\"",
+                ParamKind.Note when value is not SpinValue.StringValue { Value: var note } || !Lexer.IsNote(note) =>
+                    "must be a note like \"C4\" or \"F#3\"",
                 _ => null,
             };
 
@@ -415,15 +409,14 @@ public sealed partial class SemanticAnalyzer
         return resolved;
     }
 
-    // `sample=@kick` reaches the AST as the string "@kick"; look the variable up.
+    // `sample=@kick` reaches the AST as a ReferenceValue; look the variable up.
     private SpinValue? ResolveValue(SpinValue value, string parameter, string owner, int line, int column)
     {
-        if (value is not SpinValue.StringValue { Value: var text } || !text.StartsWith('@'))
+        if (value is not SpinValue.ReferenceValue { Name: var name })
         {
             return value;
         }
 
-        var name = text[1..];
         if (_variables.TryGetValue(name, out var variable))
         {
             _usedVariables.Add(name);
@@ -437,12 +430,12 @@ public sealed partial class SemanticAnalyzer
         return null;
     }
 
-    private void WarnIfMissingSample(Dictionary<string, SpinValue> parameters, string owner, int line, int column)
+    private void RequireSample(Dictionary<string, SpinValue> parameters, string owner, int line, int column)
     {
-        if (!parameters.ContainsKey("sample"))
+        if (!parameters.ContainsKey("sample") && !(owner.StartsWith("melody", StringComparison.Ordinal) && parameters.ContainsKey("instrument")))
         {
-            _diagnostics.Add(Diagnostic.Warning("missing-sample",
-                $"{char.ToUpperInvariant(owner[0])}{owner[1..]} has no 'sample', so it won't make any sound.",
+            _diagnostics.Add(Diagnostic.Error("missing-sample",
+                $"{char.ToUpperInvariant(owner[0])}{owner[1..]} needs a sample, e.g. (sample={(owner.StartsWith("beat", StringComparison.Ordinal) ? "@kick" : "@piano")}).",
                 line, column));
         }
     }
@@ -586,14 +579,6 @@ public sealed partial class SemanticAnalyzer
 
     private static bool IsPositiveInt(SpinValue value) =>
         value is SpinValue.NumberValue { Value: >= 1 } number && number.Value == Math.Floor(number.Value);
-
-    // Same note shape the lexer accepts: letter, optional #/b, optional octave digit.
-    [GeneratedRegex("^[A-G][#b]?[0-9]?$")]
-    private static partial Regex NotePattern();
-
-    private static bool IsNote(string value) => NotePattern().IsMatch(value);
-
-    private static bool HasOctave(string note) => note.Length > 0 && char.IsDigit(note[^1]);
 
     private static string Suggest(string name, IEnumerable<string> candidates, Func<string, string> format)
     {

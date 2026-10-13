@@ -323,8 +323,8 @@ song {
         Assert.Equal([0.0, 0.0, 0.0, 1000.0, 1000.0], notes.Select(n => n.Time));
         Assert.Equal(["C4", "E4", "G4", "A3", "C4"], notes.Select(n => n.Note));
         // rate relativo ao rootNote padrão (C4): E4 = 4 semitons acima, A3 = 3 abaixo
-        Assert.Equal(Math.Pow(2, 4 / 12.0), notes[1].rate, 6);
-        Assert.Equal(Math.Pow(2, -3 / 12.0), notes[3].rate, 6);
+        Assert.Equal(Math.Pow(2, 4 / 12.0), notes[1].Rate, 6);
+        Assert.Equal(Math.Pow(2, -3 / 12.0), notes[3].Rate, 6);
     }
 
     [Fact]

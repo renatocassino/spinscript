@@ -24,8 +24,9 @@ grupo.
 - [x] **Mensagens de erro misturam PT e EN** ("Erro léxico" vs.
       "Error in interpreter"). Escolher um idioma. (Inglês, como o resto
       do Core; comentários no código seguem livres.)
-- [ ] **`play @melodia (repeat=2)`** empilha as repetições no mesmo
-      lugar — só beats e loops avançam o tempo entre repetições.
+- [x] **`play @melodia (repeat=2)`** empilha as repetições no mesmo
+      lugar — só beats e loops avançam o tempo entre repetições. (Agora a
+      melody ocupa os compassos inteiros que dura.)
 
 ## Análise semântica
 
@@ -41,7 +42,7 @@ grupo.
       apontar pro `grid=0` em vez do `@nome` da declaração.
 - [ ] Exemplos quebrados que o analisador encontrou: `song.spin` toca
       `@firstPhase` declarado dentro de um loop; `exemplo-completo.spin`
-      faz `play @vinil` (uma variável) e usa `instrument=` em vez de `sample=`.
+      faz `play @vinil` (uma variável).
 
 ## Expressividade musical
 

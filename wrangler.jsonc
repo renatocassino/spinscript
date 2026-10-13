@@ -1,0 +1,10 @@
+// Cloudflare Workers config: no server code, just the static playground
+// built by scripts/cloudflare-build.sh.
+{
+  "name": "spinscript",
+  "compatibility_date": "2025-09-01",
+  "assets": {
+    "directory": "./spinscript-web/dist",
+    "not_found_handling": "404-page"
+  }
+}

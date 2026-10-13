@@ -1,5 +1,6 @@
 namespace SpinScript.Parser;
 
+using System.Globalization;
 using Ast;
 using SpinScript.Lexer;
 using SpinScript.Music;
@@ -420,18 +421,12 @@ public class Parser
     }
 
     // "C4:maj7" -> C4, E4, G4, B4 (all reported at the chord's position).
+    // Like a note, the root's octave is optional: "C:maj" is "C4:maj".
     private static List<Token> ExpandChord(Token chord)
     {
         var separator = chord.Value.IndexOf(':', StringComparison.Ordinal);
         var root = chord.Value[..separator];
         var quality = chord.Value[(separator + 1)..];
-
-        if (!char.IsDigit(root[^1]))
-        {
-            throw new ParserException(
-                $"Chord root '{root}' needs an octave, e.g. '{root}4:{quality}'.",
-                chord.Line, chord.Column);
-        }
 
         var notes = Chords.Expand(root, quality) ?? throw new ParserException(
             $"Unknown chord quality '{quality}' in '{chord.Value}'. Valid ones: {string.Join(", ", Chords.Qualities.Keys)}.",
@@ -491,10 +486,10 @@ public class Parser
             if (value.Contains('/'))
             {
                 var parts = value.Split('/');
-                return Reduce(new TimeFraction(long.Parse(parts[0]), long.Parse(parts[1])));
+                return Reduce(new TimeFraction(long.Parse(parts[0], CultureInfo.InvariantCulture), long.Parse(parts[1], CultureInfo.InvariantCulture)));
             }
 
-            return new TimeFraction(long.Parse(value), 1);
+            return new TimeFraction(long.Parse(value, CultureInfo.InvariantCulture), 1);
         }
 
         public static TimeFraction Add(TimeFraction a, TimeFraction b) => Reduce(new TimeFraction(
@@ -509,7 +504,9 @@ public class Parser
 
         private static long Gcd(long a, long b) => b == 0 ? a : Gcd(b, a % b);
 
-        public override string ToString() => Denominator == 1 ? Numerator.ToString() : $"{Numerator}/{Denominator}";
+        public override string ToString() => Denominator == 1
+            ? Numerator.ToString(CultureInfo.InvariantCulture)
+            : string.Create(CultureInfo.InvariantCulture, $"{Numerator}/{Denominator}");
     }
 
     /// <summary>
@@ -625,24 +622,22 @@ public class Parser
         {
             var patternGrid = Consume(TokenType.PATTERN_GRID);
 
-            var countIndex = 0;
-            for (int i = 0; i < patternGrid.Value.Length; i++)
+            // Each 'x', '.' or '-' is one grid slot; '|' is only a visual
+            // separator and doesn't take a slot. Steps are 1-indexed, exactly
+            // like the number-list form, so `{ x... }` and `{ 1 }` are the
+            // same beat.
+            var slot = 0;
+            foreach (var currentChar in patternGrid.Value)
             {
-                var currentChar = patternGrid.Value[i];
-                if (currentChar == '.')
-                {
-                    continue;
-                }
                 if (currentChar == '|')
                 {
-                    countIndex += 1;
                     continue;
                 }
+
+                slot++;
                 if (currentChar == 'x')
                 {
-                    // +1: o AST usa steps 1-indexados, igual à lista de números
-                    steps.Add(i - countIndex + 1);
-                    continue;
+                    steps.Add(slot);
                 }
             }
 
@@ -651,11 +646,11 @@ public class Parser
 
         try
         {
-            steps.Add(int.Parse(Consume(TokenType.NUMBER).Value));
+            steps.Add(ParseStep(Consume(TokenType.NUMBER)));
 
             while (Match(TokenType.COMMA))
             {
-                steps.Add(int.Parse(Consume(TokenType.NUMBER).Value));
+                steps.Add(ParseStep(Consume(TokenType.NUMBER)));
             }
         }
         catch (ParserException exception)
@@ -665,6 +660,16 @@ public class Parser
         }
 
         return steps;
+    }
+
+    private static int ParseStep(Token token)
+    {
+        if (!int.TryParse(token.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var step) || step < 1)
+        {
+            throw new ParserException($"Invalid step '{token.Value}'. Steps are whole numbers starting at 1.", token.Line, token.Column);
+        }
+
+        return step;
     }
 
     /// <summary>
@@ -691,7 +696,7 @@ public class Parser
         SpinValue value;
         if (Check(TokenType.NUMBER))
         {
-            value = new SpinValue.NumberValue(double.Parse(Consume(TokenType.NUMBER).Value));
+            value = new SpinValue.NumberValue(double.Parse(Consume(TokenType.NUMBER).Value, CultureInfo.InvariantCulture));
         } else if (Check(TokenType.STRING_LITERAL))
         {
             value = new SpinValue.StringValue(Consume(TokenType.STRING_LITERAL).Value);
@@ -805,10 +810,10 @@ public class Parser
             value = new SpinValue.StringValue(Consume(TokenType.STRING_LITERAL).Value);
         } else if (Check(TokenType.NUMBER))
         {
-            value = new SpinValue.NumberValue(double.Parse(Consume(TokenType.NUMBER).Value));
+            value = new SpinValue.NumberValue(double.Parse(Consume(TokenType.NUMBER).Value, CultureInfo.InvariantCulture));
         } else if (Check(TokenType.REFERENCE))
         {
-            value = new SpinValue.StringValue($"@{Consume(TokenType.REFERENCE).Value}");
+            value = new SpinValue.ReferenceValue(Consume(TokenType.REFERENCE).Value);
         }
         else if (Check(TokenType.BOOLEAN))
         {

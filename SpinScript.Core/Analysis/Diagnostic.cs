@@ -33,6 +33,8 @@ public record Diagnostic(DiagnosticSeverity Severity, string Code, string Messag
     public static Diagnostic FromLexerException(LexerException exception) =>
         Error("lexer-error", exception.Reason, exception.Line, exception.Column);
 
-    public override string ToString() =>
-        $"{(IsError ? "error" : "warning")}: {Message} (line {Line + 1}, column {Column + 1})";
+    /// <summary>The message followed by its 1-indexed position.</summary>
+    public string Describe() => $"{Message} (line {Line + 1}, column {Column + 1})";
+
+    public override string ToString() => $"{(IsError ? "error" : "warning")}: {Describe()}";
 }

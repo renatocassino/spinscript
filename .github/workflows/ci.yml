@@ -17,46 +17,23 @@ jobs:
       - run: dotnet build SpinScript
       - run: dotnet test SpinScript.Tests
 
+  # Roda o mesmo script que o Workers Builds da Cloudflare usa pra publicar
+  # (scripts/cloudflare-build.sh): se quebrar aqui, quebraria no deploy.
+  # O deploy em si é feito pela Cloudflare, não por este workflow.
   web:
-    name: WASM + playground
+    name: WASM (Release) + playground
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-      - run: dotnet workload install wasm-tools
-      # sync-wasm copia a saída Debug de SpinScript.Wasm para public/wasm
-      - run: dotnet build SpinScript.Wasm
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: spinscript-web/package-lock.json
-      - run: npm ci
-        working-directory: spinscript-web
-      - run: npm run build
-        working-directory: spinscript-web
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: spinscript-web/dist
-
-  # Mesmo esquema de play.cassino.dev / games.cassino.dev: GitHub Pages,
-  # sem token — o domínio vem de spinscript-web/public/CNAME.
-  deploy:
-    name: Deploy (GitHub Pages)
-    needs: [test, web]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - run: bash scripts/cloudflare-build.sh
 
   vscode:
     name: Extensão VS Code

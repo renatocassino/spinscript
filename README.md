@@ -129,7 +129,7 @@ Every front end drives the same three-stage pipeline in `SpinScript.Core`:
 |---|---|---|
 | `SpinScript.Tests` | xUnit test suite (`TokenizerTests`, `ParserTests`, `CompilerTests`) | Calls `Lexer`/`Parser`/`Compiler` directly |
 | `SpinScript` | CLI (`spinscript <file.spin>`), built on `Spectre.Console.Cli` | `RunCommand` parses, analyzes and compiles a file: lists every error and warning with its line, column and source excerpt, then prints the event timeline (time, bar.beat, sample, note, length). `--ast` also prints the syntax tree. Exits with `1` when there are errors |
-| `SpinScript.Wasm` | `SpinScript.Core` compiled to `browser-wasm` via .NET's WebAssembly SDK | Exposes three `[JSExport]` functions returning JSON: `Parse(source)` (AST), `Check(source)` (every diagnostic, see [Errors and diagnostics](#errors-and-diagnostics)) and `Compile(source)` (event list, or `{error, line, column, diagnostics}` on failure) |
+| `SpinScript.Wasm` | `SpinScript.Core` compiled to `browser-wasm` via .NET's WebAssembly SDK | Exposes three `[JSExport]` functions returning JSON: `Parse(source)` (AST), `Check(source)` (every diagnostic, see [Errors and diagnostics](#errors-and-diagnostics)) and `Compile(source)` (event list, or `{error, line, column, errors}` on failure). The JSON itself is written by hand in `SpinScript.Core/Json/SpinScriptJson.cs`, so it survives the trimmed Release build |
 | `spinscript-web` | Astro site hosting a browser playground | The `<spinscript-editor>` Lit component loads the WASM build at runtime, does its own syntax highlighting (a regex mirroring the VS Code grammar), calls `Compile()`, and schedules the resulting events on the Web Audio API clock to actually play them |
 | `spinscript-vscode` | VS Code extension | Registers the `.spin` language and a TextMate grammar (`syntaxes/spinscript.tmLanguage.json`) for syntax highlighting — no language server, no diagnostics from the real parser (yet) |
 
@@ -160,12 +160,23 @@ To build the WebAssembly module and run the browser playground:
 # one-time: install the wasm build tooling
 sudo dotnet workload install wasm-tools
 
-dotnet publish SpinScript.Wasm -c Release
+dotnet publish SpinScript.Wasm -c Release   # or `dotnet build SpinScript.Wasm` for a quicker Debug build
 
 cd spinscript-web
 npm install
-npm run dev   # runs `sync-wasm` first, copying the published build into public/wasm
+npm run dev   # runs `sync-wasm` first, copying the newest WASM build into public/wasm
 ```
+
+### Deploy
+
+The playground is published to <https://spinscript.cassino.dev> by
+**Cloudflare Workers Builds**: Cloudflare watches `main`, runs
+[`scripts/cloudflare-build.sh`](./scripts/cloudflare-build.sh) (installs the
+.NET 10 SDK and `wasm-tools` if missing, publishes `SpinScript.Wasm` in
+Release, builds the Astro site) and serves `spinscript-web/dist` as static
+assets, per [`wrangler.jsonc`](./wrangler.jsonc). No token or deploy job
+lives in this repo; the GitHub Actions CI runs the same build script only to
+catch a broken deploy before Cloudflare does.
 
 To package the VS Code extension:
 
@@ -362,7 +373,8 @@ different sample or velocity per note. A trailing comma before the closing
 
 A note name is a letter `A`–`G`, optionally followed by `#` (sharp) or `b`
 (flat), optionally followed by a single octave digit: `C4`, `G#5`, `Db`,
-`A`, `F#9` are all valid. The `sample` you give a melody should be a
+`A`, `F#9` are all valid. Without an octave a note plays in octave 4, so
+`A` is `A4`. The `sample` you give a melody should be a
 recording of a single pitch (the file names in this repo's examples spell
 that out, e.g. `grand_piano_c4.wav`) — that pitch is the melody's
 `rootNote` parameter, `"C4"` by default, and every note gets played back
@@ -405,8 +417,9 @@ melody @progression (sample=@piano) {
 ```
 
 The `:` is what tells a chord apart from a note: `G7` is the note G in
-octave 7, `G3:7` is a G dominant seventh chord. The root needs an octave,
-and the chord is stacked upward from it. Quality names are case-sensitive
+octave 7, `G3:7` is a G dominant seventh chord. The chord is stacked
+upward from the root, whose octave is optional like a note's (`A:m` is
+`A4:m`). Quality names are case-sensitive
 (`m` is minor):
 
 | Quality | Notes above the root | Quality | Notes above the root |
@@ -423,8 +436,7 @@ and the chord is stacked upward from it. Quality names are case-sensitive
 Like the `+` sugar, a chord is resolved by the parser: it becomes one note
 per pitch in the AST, so the compiler and the CLI timeline just see
 several notes starting together. A `+` after a chord is relative to the
-chord's end. An unknown quality or a root without an octave is a syntax
-error, and each broken entry in a melody is reported on its own, without
+chord's end. An unknown quality is a syntax error, and each broken entry in a melody is reported on its own, without
 hiding the rest of the list.
 
 #### Rests
@@ -568,15 +580,18 @@ when there's at least one error (warnings from a successful compile are on
 | Code | Example |
 |---|---|
 | `unknown-reference` | `play @groov;` when only `@groove` exists (suggests the closest name); `play @kickSample;` on a variable; `play` of a beat/loop declared *inside* another loop (only top-level declarations can be played); `sample=@missing` |
-| `invalid-parameter` | `grid="abc"`, `grid=0`, `bars=2.5`, `repeat="2"`, `rootNote="C"` — checked through `@variable` references too |
-| `step-out-of-grid` | `{ 17 }` with `grid=16`, `{ 0 }`, or a grid row longer than `grid` |
-| `invalid-note` | a melody note without an octave (`A` instead of `A4`) |
-| `invalid-time` | a note start/duration that divides by zero (`1/0`) |
+| `invalid-parameter` | `grid="abc"`, `grid=0`, `grid=2.5`, `bars=0`, `repeat=-1`, `repeat="2"`, `rootNote="H4"` — checked through `@variable` references too |
+| `missing-sample` | a beat/melody with no `sample` (a melody may use `instrument=` instead) |
+| `step-out-of-grid` | `{ 17 }` with `grid=16`, or a grid row longer than `grid` |
 | `cycle` | `loop @a { play @b; }` + `loop @b { play @a; }` — reported at the `play` that closes the cycle, with the path (`@a → @b → @a`) |
 | `missing-song` / `duplicate-song` | no `song` block, or more than one |
 | `play-outside-loop` | a `play` at the top level of the file |
 | `duplicate-declaration` | two beats/melodies/loops with the same name |
-| `invalid-config` | `@bpm = 0;`, `@bpm = "fast";`, `@beatsPerBar = 3.5;` |
+| `invalid-config` | `@bpm = 0;`, `@bpm = "fast";`, `@beatsPerBar = 3.5;` (a fractional `@bpm` like `127.5` is fine) |
+
+Some mistakes are caught even earlier, by the lexer or parser, and come
+back as `lexer-error` / `syntax-error`: a fraction that divides by zero
+(`1/0`), a step `0`, an unknown chord quality.
 
 **Warnings** — the file compiles, but something in it has no effect:
 
@@ -584,8 +599,7 @@ when there's at least one error (warnings from a successful compile are on
 |---|---|
 | `unused-declaration` | a beat/melody/loop that the `song` never reaches |
 | `unused-variable` | a variable nothing references (`@bpm`/`@beatsPerBar` excepted) |
-| `unknown-parameter` | a parameter the compiler doesn't read yet (`swing`, `volume`, `instrument`, per-note parameters…), with a "did you mean" for typos like `grdi` |
-| `missing-sample` | a beat/melody with no `sample` — it won't make a sound |
+| `unknown-parameter` | a parameter the compiler doesn't read yet (`swing`, `volume`, per-note parameters…), with a "did you mean" for typos like `grdi` (and `instrument` on a beat suggests `sample`) |
 | `silent-note` | a note with duration `0` |
 | `duplicate-step` | the same step twice in one beat |
 | `ignored-assignment` | `@name = value;` inside a `loop`/`song`, which the compiler ignores |
@@ -635,10 +649,9 @@ melody @minhaAutoria (instrument=@piano) {
 };
 ```
 
-> Note: this file's melody parameter is `instrument=@piano`. The compiler
-> currently only reads `sample`/`rootNote` off a `melody`'s parameters —
-> `instrument` parses fine but isn't consumed yet (the analyzer warns about it), so new code should use
-> `sample=@piano` instead.
+> Note: this file's melody parameter is `instrument=@piano`, an alias the
+> compiler accepts for a melody's `sample` (older examples use it); new code
+> should prefer `sample=@piano`.
 
 And the arrangement that plays it, from the same file — a `loop` used
 purely as a sequential container (no `bars=`, so its own length is just

@@ -118,14 +118,20 @@ loop @groove (bars=1) {
         Assert.Equal(2, Check(source).Count(d => d.Code == "invalid-parameter"));
     }
 
-    [Theory]
-    [InlineData("0")]
-    [InlineData("17")]
-    public void StepOutsideTheGridIsAnError(string step)
+    [Fact]
+    public void StepOutsideTheGridIsAnError()
     {
-        var diagnostic = Single(Valid.Replace("{ 1, 5, 9, 13 }", $"{{ 1, {step} }}"), "step-out-of-grid");
+        var diagnostic = Single(Valid.Replace("{ 1, 5, 9, 13 }", "{ 1, 17 }"), "step-out-of-grid");
 
-        Assert.Contains($"Step {step}", diagnostic.Message);
+        Assert.Contains("Step 17", diagnostic.Message);
+    }
+
+    [Fact]
+    public void StepZeroIsASyntaxError()
+    {
+        var diagnostic = Assert.Single(Check(Valid.Replace("{ 1, 5, 9, 13 }", "{ 0, 5 }")));
+
+        Assert.Equal("syntax-error", diagnostic.Code);
     }
 
     [Fact]
@@ -160,12 +166,15 @@ song {
 """;
 
     [Fact]
-    public void NoteWithoutOctaveIsAnError()
+    public void NoteWithoutOctaveIsAllowedAndPlaysInOctaveFour()
     {
-        var diagnostic = Single(WithMelody.Replace("NOTES", "C4 0 1/4, A 1/4 1/4"), "invalid-note");
+        var source = WithMelody.Replace("NOTES", "C4 0 1/4, A 1/4 1/4");
+        Assert.Empty(Check(source));
 
-        Assert.Equal(2, diagnostic.Line);
-        Assert.Equal(41, diagnostic.Column);
+        var compiler = new Compiler(source);
+        compiler.Compile();
+        var notes = compiler.compileResult.Events.OfType<MelodyEvent>().ToList();
+        Assert.Equal(Math.Pow(2, 9 / 12.0), notes[1].Rate, 6); // A = A4, 9 semitons acima de C4
     }
 
     [Fact]
@@ -179,13 +188,13 @@ song {
     [Fact]
     public void DivisionByZeroInNoteTimeIsAnError()
     {
-        Assert.Single(Check(WithMelody.Replace("NOTES", "C4 1/0 1/4")), d => d.Code == "invalid-time");
+        Assert.Single(Check(WithMelody.Replace("NOTES", "C4 1/0 1/4")), d => d.Code == "lexer-error");
     }
 
     [Fact]
     public void InvalidRootNoteIsAnError()
     {
-        Assert.Single(Check(WithMelody.Replace("NOTES", "C4 0 1/4").Replace("(sample=@piano)", "(sample=@piano, rootNote=\"C\")")),
+        Assert.Single(Check(WithMelody.Replace("NOTES", "C4 0 1/4").Replace("(sample=@piano)", "(sample=@piano, rootNote=\"H4\")")),
             d => d.Code == "invalid-parameter");
     }
 
@@ -283,12 +292,20 @@ song {
     }
 
     [Fact]
-    public void InstrumentParameterSuggestsSample()
+    public void InstrumentIsAnAliasOfSampleOnMelodies()
     {
         var source = WithMelody.Replace("NOTES", "C4 0 1/4").Replace("sample=@piano", "instrument=@piano");
 
-        Assert.Contains(Check(source), d => d.Code == "unknown-parameter" && d.Message.Contains("Did you mean 'sample'?"));
-        Assert.Contains(Check(source), d => d.Code == "missing-sample");
+        Assert.Empty(Check(source));
+    }
+
+    [Fact]
+    public void InstrumentOnABeatSuggestsSample()
+    {
+        var diagnostics = Check(Valid.Replace("sample=@kick", "instrument=@kick"));
+
+        Assert.Contains(diagnostics, d => d.Code == "unknown-parameter" && d.Message.Contains("Did you mean 'sample'?"));
+        Assert.Contains(diagnostics, d => d.Code == "missing-sample" && d.IsError);
     }
 
     [Fact]
