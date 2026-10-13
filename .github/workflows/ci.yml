@@ -37,6 +37,29 @@ jobs:
         working-directory: spinscript-web
       - run: npm run build
         working-directory: spinscript-web
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spinscript-web-dist
+          path: spinscript-web/dist
+
+  deploy:
+    name: Deploy (Cloudflare Pages)
+    needs: [test, web]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://spinscript.cassino.dev
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: spinscript-web-dist
+          path: dist
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=spinscript --branch=main
 
   vscode:
     name: Extensão VS Code
