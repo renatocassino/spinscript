@@ -231,4 +231,44 @@ song {
         Assert.Equal([0.0, 2000.0], beatTimes);
         Assert.Equal([0.0, 2000.0, 4000.0], chimbalTimes);
     }
+
+    [Fact]
+    public void PatternGridAndNumberListProduceTheSameTimes()
+    {
+        // @bpm=120, grid=16 => 1 step = 125ms. O primeiro 'x' do grid é o
+        // step 1 (0ms), não um step antes do compasso.
+        var input = """
+@bpm = 120;
+@kick = "kick.wav";
+@hihat = "hihat.wav";
+
+beat @grid (sample=@kick, grid=16) { x...|x...|..x.|...x };
+beat @list (sample=@hihat, grid=16) { 1, 5, 11, 16 };
+
+loop @groove {
+    play @grid;
+    play @list;
+}
+
+song {
+    play @groove;
+}
+""";
+        var compiler = new Compiler(input);
+        compiler.Compile();
+
+        var gridTimes = compiler.compileResult.Events
+            .OfType<SoundEvent>()
+            .Where(e => e.Sample == "kick.wav")
+            .Select(e => e.Time)
+            .ToList();
+        var listTimes = compiler.compileResult.Events
+            .OfType<SoundEvent>()
+            .Where(e => e.Sample == "hihat.wav")
+            .Select(e => e.Time)
+            .ToList();
+
+        Assert.Equal([0.0, 500.0, 1250.0, 1875.0], gridTimes);
+        Assert.Equal(listTimes, gridTimes);
+    }
 }

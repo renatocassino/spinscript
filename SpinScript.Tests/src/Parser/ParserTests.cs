@@ -142,7 +142,7 @@ play @song1 (bpm=120, volume=80);
     [Fact]
     public void ParsePatternReturnPatternGridWithSameContract()
     {
-        var program = new Parser("beat @kick (grid=16) { x...|.x..|..x.|x..x };\nbeat @hats (grid=16) { 0, 5, 10, 12, 15 };").Parse();
+        var program = new Parser("beat @kick (grid=16) { x...|.x..|..x.|x..x };\nbeat @hats (grid=16) { 1, 6, 11, 13, 16 };").Parse();
 
         Assert.False(program.HasErrors);
 
@@ -150,13 +150,13 @@ play @song1 (bpm=120, volume=80);
 
         Assert.Equal("kick", beat.Name);
         Assert.Equal(16, beat.Parameters["grid"].AsInt());
-        Assert.Equal([0, 5, 10, 12, 15], beat.Steps);
+        Assert.Equal([1, 6, 11, 13, 16], beat.Steps);
 
         var beat2 = Assert.IsType<BeatNode>(program.Ast.Statements[1]);
 
         Assert.Equal("hats", beat2.Name);
         Assert.Equal(16, beat2.Parameters["grid"].AsInt());
-        Assert.Equal([0, 5, 10, 12, 15], beat2.Steps);
+        Assert.Equal([1, 6, 11, 13, 16], beat2.Steps);
     } 
 
     [Fact]

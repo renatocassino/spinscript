@@ -334,15 +334,9 @@ purely cosmetic separator between beat groups:
 beat @kick (sample=@kickSample, grid=16) { x...|.x..|..x.|x..x }
 ```
 
-> Note: the grid notation's positions are counted from `0` (the first `x`
-> is slot 0), while the comma-separated number list above is 1-indexed
-> (`{ 9 }` means the ninth slot). The parser accepts both and produces a
-> valid AST either way, but the compiler currently applies the same
-> "subtract one" step-to-time conversion to both forms — so today, a grid
-> pattern's hits land one step earlier than the equivalent number list
-> would (and a hit on the very first slot lands *before* the bar even
-> starts). Until that's reconciled, prefer the number-list form when you
-> care about exact timing.
+Both forms are equivalent: the first `x` is step `1`, exactly like `{ 1 }`
+in the number list, so `{ x...|x... }` and `{ 1, 5 }` produce the same
+hits. A `-` inside a grid row is accepted as a silent slot, same as `.`.
 
 `grid` defaults to `16` if omitted. The trailing `;` after a `beat`'s `}`
 is optional — both example lines above are valid with or without it.

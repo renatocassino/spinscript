@@ -518,7 +518,8 @@ public class Parser
                 }
                 if (currentChar == 'x')
                 {
-                    steps.Add(i - countIndex);
+                    // +1: o AST usa steps 1-indexados, igual à lista de números
+                    steps.Add(i - countIndex + 1);
                     continue;
                 }
             }
