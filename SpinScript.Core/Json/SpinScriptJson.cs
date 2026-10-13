@@ -267,6 +267,17 @@ public static class SpinScriptJson
                 WriteStatements(writer, loop.Statements);
                 WriteLocation(writer, loop.Line, loop.Column);
                 break;
+            case ParallelNode group:
+                writer.WriteString("type", "parallel");
+                writer.WriteStartArray("plays");
+                foreach (var member in group.Plays)
+                {
+                    WriteNode(writer, member);
+                }
+                writer.WriteEndArray();
+                WriteParameters(writer, group.Parameters);
+                WriteLocation(writer, group.Line, group.Column);
+                break;
             case PlayNode play:
                 writer.WriteString("type", "play");
                 writer.WriteString("patternName", play.PatternName);

@@ -29,4 +29,5 @@ public enum TokenType
     RBRACKET,
     REST, // '_' — pausa numa melody: _ 1/4
     MINUS, // '-' antes de um número: transpose=-2
+    AMPERSAND, // '&' entre alvos de um play paralelo: play @a & @b;
 }

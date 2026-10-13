@@ -107,6 +107,7 @@ public class Lexer
                 case '[': AddToken(TokenType.LBRACKET, currentChar.ToString()); break;
                 case ']': AddToken(TokenType.RBRACKET, currentChar.ToString()); break;
                 case '_': AddToken(TokenType.REST, currentChar.ToString()); break;
+                case '&': AddToken(TokenType.AMPERSAND, currentChar.ToString()); break;
                 default:
                     throw new LexerException($"Unexpected character '{currentChar}'", _line, _column);
             }

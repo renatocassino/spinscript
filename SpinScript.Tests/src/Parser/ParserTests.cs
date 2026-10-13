@@ -861,4 +861,17 @@ play @song1 (bpm=120, volume=80);
         var assignment = Assert.IsType<AssignmentNode>(Assert.Single(program.Ast.Statements));
         Assert.Equal(new SpinValue.NumberValue(-5), assignment.Value);
     }
+
+    [Fact]
+    public void ParseParallelPlay()
+    {
+        var program = new Parser("song { play @a & @b & @c (repeat=2); }").Parse();
+
+        Assert.False(program.HasErrors);
+        var song = Assert.IsType<SongNode>(program.Ast.Statements[0]);
+        var group = Assert.IsType<ParallelNode>(Assert.Single(song.Statements));
+        Assert.Equal(["a", "b", "c"], group.Plays.Select(p => p.PatternName));
+        Assert.Equal(new SpinValue.NumberValue(2), group.Parameters["repeat"]);
+        Assert.Equal([12, 17, 22], group.Plays.Select(p => p.Column));
+    }
 }

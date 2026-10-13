@@ -73,7 +73,7 @@ grupo.
 
 - [ ] **Modificadores de `play` além de `repeat`:** `offset`, `length`,
       `mute`, `reverse`, `every=2` (toca a cada N repetições), `fadeIn`/`fadeOut`.
-- [ ] **Seções paralelas explícitas** dentro de `song` (hoje só `loop`
+- [x] **Seções paralelas explícitas** dentro de `song` (hoje só `loop`
       empilha) — algo como `play @a & @b;`.
 - [ ] **Parâmetros/argumentos em loops** (templates):
       `loop @groove(@kickSample) { ... }` reutilizável com samples diferentes.
@@ -127,7 +127,8 @@ grupo.
       o código, destacar no editor a linha que está tocando, loop de um
       trecho (A–B), compartilhar música por URL, exportar/importar `.spin`,
       marcar as seções do `song` (intro, verso...) na linha do tempo.
-- [ ] **Aviso de "loop depois de melody":** num mesmo loop, `play @chords;
+- [ ] **Aviso de "loop depois de melody"** (agora dá pra resolver com
+      `play @chords & @drums;` — o warning poderia sugerir isso): num mesmo loop, `play @chords;
       play @drums;` com `@drums` sendo um loop toca a bateria *depois* dos
       acordes. Os exemplos tropeçaram nisso; vale um warning do analisador.
 - [ ] **Gramática do VS Code gerada/validada** contra o lexer, pra não

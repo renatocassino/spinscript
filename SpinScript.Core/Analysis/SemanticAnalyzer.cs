@@ -157,6 +157,11 @@ public sealed class SemanticAnalyzer
                         $"'play @{play.PatternName}' can only be used inside a 'loop' or the 'song'.",
                         play.Line, play.Column));
                     break;
+                case ParallelNode group:
+                    _diagnostics.Add(Diagnostic.Error("play-outside-loop",
+                        $"'play {Describe(group)}' can only be used inside a 'loop' or the 'song'.",
+                        group.Line, group.Column));
+                    break;
                 case SongNode song:
                     if (_song is null)
                     {
@@ -227,6 +232,13 @@ public sealed class SemanticAnalyzer
                 break;
             case PlayNode play:
                 CheckPlay(play);
+                break;
+            case ParallelNode group:
+                CheckParameters(group.Parameters, PlayParams, $"'play {Describe(group)}'", group.Line, group.Column);
+                foreach (var member in group.Plays)
+                {
+                    CheckPlay(member);
+                }
                 break;
             case AssignmentNode assignment:
                 _diagnostics.Add(Diagnostic.Warning("ignored-assignment",
@@ -462,6 +474,12 @@ public sealed class SemanticAnalyzer
         {
             switch (pending.Pop())
             {
+                case ParallelNode group:
+                    foreach (var member in group.Plays)
+                    {
+                        pending.Push(member);
+                    }
+                    break;
                 case PlayNode play when _declarations.TryGetValue(play.PatternName, out var target) && reached.Add(play.PatternName):
                     pending.Push(target);
                     break;
@@ -543,6 +561,13 @@ public sealed class SemanticAnalyzer
             {
                 yield return play;
             }
+            else if (statement is ParallelNode group)
+            {
+                foreach (var member in group.Plays)
+                {
+                    yield return member;
+                }
+            }
             else if (statement is LoopNode inner)
             {
                 foreach (var nested in PlaysInside(inner))
@@ -569,6 +594,8 @@ public sealed class SemanticAnalyzer
     // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
+
+    private static string Describe(ParallelNode group) => string.Join(" & ", group.Plays.Select(p => $"@{p.PatternName}"));
 
     private static (string Name, int Line, int Column) Identify(AstNode node) => node switch
     {

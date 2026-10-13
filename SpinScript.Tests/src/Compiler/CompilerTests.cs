@@ -478,4 +478,58 @@ song {
 
         Assert.Equal(without.Events.OfType<SoundEvent>(), withTranspose.Events.OfType<SoundEvent>());
     }
+
+    private const string Parallel = """
+@bpm = 120;
+@piano = "piano.wav";
+@kick = "kick.wav";
+
+melody @chords (sample=@piano) { C4 0 2 };
+beat @kicks (sample=@kick) { 1 }
+loop @drums { play @kicks; }
+
+song {
+    PLAYS
+}
+""";
+
+    private static CompileResult CompileParallel(string plays) => new Compiler(Parallel.Replace("PLAYS", plays)).Compile();
+
+    [Fact]
+    public void ParallelMembersStartTogetherEvenWhenOneIsALoop()
+    {
+        // Without '&', a loop after a melody would wait for it to end.
+        var result = CompileParallel("play @chords & @drums;");
+
+        Assert.Equal(0.0, result.Events.OfType<SoundEvent>().Single().Time);
+        Assert.Equal(0.0, result.Events.OfType<MelodyEvent>().Single().Time);
+        Assert.Equal(4000.0, result.Length); // the longest member: 2 bars
+    }
+
+    [Fact]
+    public void ParallelRepeatRepeatsTheWholeGroupAfterItsLongestMember()
+    {
+        var result = CompileParallel("play @chords & @kicks (repeat=2); play @kicks;");
+
+        Assert.Equal([0.0, 4000.0, 8000.0], result.Events.OfType<SoundEvent>().Select(e => e.Time));
+        Assert.Equal([0.0, 4000.0], result.Events.OfType<MelodyEvent>().Select(e => e.Time));
+    }
+
+    [Fact]
+    public void ParallelTransposeAppliesToEveryMember()
+    {
+        var result = CompileParallel("play @chords & @drums (transpose=12);");
+
+        Assert.Equal("C5", result.Events.OfType<MelodyEvent>().Single().Note);
+    }
+
+    [Fact]
+    public void CompilePartFollowsParallelPlays()
+    {
+        var source = Parallel.Replace("PLAYS", "play @drums;").Replace("loop @drums { play @kicks; }", "loop @drums { play @kicks & @chords; }");
+
+        var result = new Compiler(source).CompilePart("drums");
+
+        Assert.Single(result.Events.OfType<MelodyEvent>());
+    }
 }

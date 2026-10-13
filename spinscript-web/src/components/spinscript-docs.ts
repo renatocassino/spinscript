@@ -695,8 +695,8 @@ song { play @part (repeat=2); }`,
       <div class="note">
         Because a played loop waits for whatever came before it, mixing the two in one loop can surprise you:
         <code>play @chords; play @drums;</code> — where <code>@drums</code> is a loop — starts the drums
-        <em>after</em> the chords. To layer drums under chords, play the drum <code>beat</code>s directly in that
-        loop, or put the loop first.
+        <em>after</em> the chords. Join them with <code>&amp;</code> to say "together":
+        <code>play @chords &amp; @drums;</code> (see <a href="#together" @click=${(e: Event) => this.#scrollTo(e, 'together')}>Playing things together</a>).
       </div>
       <p>
         A loop body may also declare a <code>beat</code>, <code>melody</code> or <code>loop</code> inline; those play
@@ -746,6 +746,34 @@ song {
         </tr>
       </table>
       <p><code>play</code> can target any top-level <code>beat</code>, <code>melody</code> or <code>loop</code>.</p>
+      <h3 id="together">Playing things together: <code>&amp;</code></h3>
+      <p>
+        Join targets with <code>&amp;</code> and they all start at the same moment — beats, melodies and loops alike.
+        The group lasts as long as its longest member, and whatever comes next starts after it. Parameters after the
+        group apply to all of it: <code>repeat</code> plays the whole group again, <code>transpose</code> shifts every
+        melody in it.
+      </p>
+      ${this.#code(
+        `
+@kick = "${KICK}";
+@snare = "${SNARE}";
+@piano = "${PIANO}";
+
+beat @kickPart  (sample=@kick)  { 1, 9 }
+beat @snarePart (sample=@snare) { 5, 13 }
+loop @drums { play @kickPart; play @snarePart; }
+
+melody @chords (sample=@piano, rootNote="C3") {
+    C4:maj 0 1,  A3:m 1 1,
+};
+
+song {
+    play @drums (repeat=2);              // drums alone
+    play @chords & @drums (repeat=2);    // chords and drums, together
+    play @chords & @drums (transpose=5); // the same, a fourth up
+}`,
+        'Together',
+      )}
       <h3>Transposing</h3>
       <p>Write a riff once, then play it in other keys — here the same phrase climbs C, F, G and back:</p>
       ${this.#code(
@@ -1001,6 +1029,7 @@ loop @section (bars=4) {   // beats/melodies: together
 
 song {                     // loops: one after the other
     play @section (repeat=2);
+    play @m & @k;          // &: start together
 }`)}
     </section>`;
   }

@@ -58,4 +58,8 @@ public record LoopNode(string Name, Dictionary<string, SpinValue> Parameters, Li
 
 public record PlayNode(string PatternName, Dictionary<string, SpinValue> Parameters, int Line, int Column) : AstNode;
 
+// `play @a & @b (repeat=2);` — everything in Plays starts together; the
+// group lasts as long as its longest member. Parameters apply to the group.
+public record ParallelNode(List<PlayNode> Plays, Dictionary<string, SpinValue> Parameters, int Line, int Column) : AstNode;
+
 public record SongNode(Dictionary<string, SpinValue> Parameters, List<AstNode> Statements, int Line, int Column) : AstNode;

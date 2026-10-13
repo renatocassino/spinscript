@@ -175,15 +175,28 @@ public class Parser
     /// (the duplicate <c>free</c> key here would actually throw — see
     /// <see cref="ParseParam"/>).
     /// </example>
-    public PlayNode ParsePlay()
+    public AstNode ParsePlay()
     {
         Consume(TokenType.PLAY);
-        var beatRef = Consume(TokenType.REFERENCE);
+        var targets = new List<Token> { Consume(TokenType.REFERENCE) };
+        while (Match(TokenType.AMPERSAND))
+        {
+            targets.Add(Consume(TokenType.REFERENCE));
+        }
         var parameters = ParseParameters();
 
         Consume(TokenType.SEMICOLON);
 
-        return new PlayNode(beatRef.Value, parameters, beatRef.Line, beatRef.Column);
+        var first = targets[0];
+        if (targets.Count == 1)
+        {
+            return new PlayNode(first.Value, parameters, first.Line, first.Column);
+        }
+
+        // `play @a & @b;` — the members carry no parameters of their own;
+        // the group's apply to all of them together.
+        var plays = targets.Select(t => new PlayNode(t.Value, [], t.Line, t.Column)).ToList();
+        return new ParallelNode(plays, parameters, first.Line, first.Column);
     }
 
     /// <summary>

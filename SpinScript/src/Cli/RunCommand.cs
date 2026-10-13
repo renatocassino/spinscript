@@ -226,6 +226,13 @@ public sealed class RunCommand : Command<RunSettings>
                 parent.AddNode(DescribeBeat(beat));
                 break;
 
+            case ParallelNode group:
+                var parameters = string.Join(", ", group.Parameters.Select(kv => $"{kv.Key}={kv.Value}"));
+                parent.AddNode(
+                    $"[magenta]play[/] [yellow]{Markup.Escape(string.Join(" & ", group.Plays.Select(p => $"@{p.PatternName}")))}[/] " +
+                    $"[grey]({Markup.Escape(parameters)}) together[/]");
+                break;
+
             case PlayNode play:
                 parent.AddNode(DescribePlay(play));
                 break;

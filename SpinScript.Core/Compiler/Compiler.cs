@@ -122,6 +122,12 @@ public class Compiler
                     case PlayNode play when reachable.Add(play.PatternName):
                         pending.Push(play.PatternName);
                         break;
+                    case ParallelNode group:
+                        foreach (var member in group.Plays)
+                        {
+                            body.Push(member);
+                        }
+                        break;
                     case LoopNode inner:
                         foreach (var statement in inner.Statements)
                         {
@@ -239,6 +245,8 @@ public class Compiler
                     // `play` only makes sense inside a loop or the song: at the
                     // top level there's no timeline position to play it at.
                     throw Error(play, $"'play @{play.PatternName}' must be inside a loop or the song block.");
+                case ParallelNode group:
+                    throw Error(group, "'play' must be inside a loop or the song block.");
                 case SongNode song:
                     if (_song != null)
                     {
@@ -287,6 +295,9 @@ public class Compiler
             case PlayNode play:
                 CompilePlay(play);
                 break;
+            case ParallelNode group:
+                CompileParallel(group);
+                break;
             default:
                 throw new InvalidOperationException($"Unknown statement type: {statement.GetType().Name}");
         }
@@ -324,6 +335,35 @@ public class Compiler
             for (var i = 0; i < repeatCount; i++)
             {
                 CompileStatement(target);
+            }
+        }
+        finally
+        {
+            _transpose -= transpose;
+        }
+    }
+
+    // `play @a & @b (repeat=2);`: each repetition starts every member at the
+    // same point and ends when the longest one does.
+    private void CompileParallel(ParallelNode group)
+    {
+        var repeatCount = GetWholeNumber(group.Parameters, "repeat", 1, group, min: 0);
+        var transpose = GetWholeNumber(group.Parameters, "transpose", 0, group, min: int.MinValue);
+
+        _transpose += transpose;
+        try
+        {
+            for (var i = 0; i < repeatCount; i++)
+            {
+                var start = _currentTime;
+                var furthest = start;
+                foreach (var member in group.Plays)
+                {
+                    _currentTime = start;
+                    CompilePlay(member);
+                    furthest = Math.Max(furthest, _currentTime);
+                }
+                _currentTime = furthest;
             }
         }
         finally
@@ -407,6 +447,8 @@ public class Compiler
         return statement switch
         {
             LoopNode => true,
+            // A group is a section of its own: it follows what came before it.
+            ParallelNode => true,
             PlayNode play => _loops.ContainsKey(play.PatternName),
             _ => false,
         };
@@ -591,6 +633,7 @@ public class Compiler
             MelodyNode n => (n.Line, n.Column),
             LoopNode n => (n.Line, n.Column),
             PlayNode n => (n.Line, n.Column),
+            ParallelNode n => (n.Line, n.Column),
             SongNode n => (n.Line, n.Column),
             _ => (0, 0),
         };

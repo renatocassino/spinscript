@@ -406,4 +406,33 @@ song {
     {
         Assert.Single(Check(Valid.Replace("play @groove;", "play @groove (repeat=-1);")), d => d.Code == "invalid-parameter");
     }
+
+    [Fact]
+    public void ParallelPlayChecksEveryMember()
+    {
+        var diagnostic = Single(Valid.Replace("play @groove;", "play @groove & @nope;"), "unknown-reference");
+
+        Assert.Contains("'@nope'", diagnostic.Message);
+    }
+
+    [Fact]
+    public void ParallelPlayChecksItsParameters()
+    {
+        Assert.Single(Check(Valid.Replace("play @groove;", "play @groove & @beat (repeat=1.5);")), d => d.Code == "invalid-parameter");
+    }
+
+    [Fact]
+    public void ParallelMembersCountAsPlayed()
+    {
+        Assert.Empty(Check(Valid + "\nbeat @extra (sample=@kick) { 1 }").Where(d => d.Code != "unused-declaration")
+            .Concat(Check(Valid.Replace("play @groove;", "play @groove & @extra;") + "\nbeat @extra (sample=@kick) { 1 }")));
+    }
+
+    [Fact]
+    public void ParallelPlayCanCloseACycle()
+    {
+        var source = Valid.Replace("    play @beat;\n}", "    play @beat & @groove;\n}");
+
+        Assert.Single(Check(source), d => d.Code == "cycle");
+    }
 }

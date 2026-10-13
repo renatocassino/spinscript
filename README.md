@@ -525,6 +525,24 @@ would instead advance the timeline for whatever comes after it in the
 same body — that's what lets a `loop` be used purely as an arrangement
 container (see [Full example](#full-example) below).
 
+To say "these play together" explicitly — in a `loop` or in the `song` —
+join targets with `&`. Every member starts at the same moment (beats,
+melodies and loops alike), the group lasts as long as its longest member,
+and the next statement starts after it. Parameters after the group apply to
+all of it: `repeat` plays the whole group again, `transpose` shifts every
+melody in it.
+
+```spin
+loop @verse {
+    play @chords & @drums;      // together, even though @drums is a loop
+}
+
+song {
+    play @intro;
+    play @verse & @bassline (repeat=2);
+}
+```
+
 If a `loop` has no explicit `bars=`, its duration is inferred: the
 furthest point any of its own statements reached (so `play`ing a 4-bar
 loop inside a bar-less loop makes it 4 bars), or a single bar if nothing
@@ -634,7 +652,7 @@ What's legal where, at a glance:
 |---|---|
 | Top level (the file itself) | `@name = value;`, `beat`, `melody`, `loop`, exactly one `song` |
 | Inside a `loop { }` | `@name = value;`, `beat`, `melody`, nested `loop`, `play` |
-| Inside a `song { }` | `@name = value;`, `play` |
+| Inside a `song { }` | `@name = value;`, `play` (including `play @a & @b;`) |
 | `play` can target | a `beat`, a `melody`, or a `loop` — from inside either a `loop` or a `song` |
 
 ---
