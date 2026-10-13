@@ -6,11 +6,27 @@ import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/callout/callout.js';
 import '@awesome.me/webawesome/dist/components/tag/tag.js';
 import '@awesome.me/webawesome/dist/components/spinner/spinner.js';
-import '@awesome.me/webawesome/dist/components/divider/divider.js';
+import '@awesome.me/webawesome/dist/components/drawer/drawer.js';
+import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
+import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 
-// Mirrors SpinScript.Wasm/Json/EventJsonConverter.cs: `type` discriminates
-// between the two event shapes it writes ("sound" for SoundEvent, "melody"
-// for MelodyEvent), so `rate` is only ever present on melody events.
+import './spinscript-docs';
+import { examples } from '../lib/examples';
+import { highlightSpinScript, lineNumbers, tokenStyles } from '../lib/highlight';
+import {
+  NEW_SONG_CODE,
+  createSong,
+  loadLibrary,
+  saveLibrary,
+  uniqueName,
+  watchLibrary,
+  type Song,
+  type SongLibrary,
+} from '../lib/songs';
+
+// Mirrors the Compile() output of SpinScript.Core/Json/SpinScriptJson.cs:
+// `type` tells the two event shapes apart, and `rate` only exists on melody
+// events.
 interface SpinScriptEvent {
   type: 'sound' | 'melody';
   time: number;
@@ -23,15 +39,16 @@ interface SpinScriptEvent {
 
 interface CompileResult {
   events: SpinScriptEvent[];
+  duration: number;
 }
 
-// Both Parse() and Compile() catch exceptions on the .NET side and encode
-// them as this shape instead of throwing across the JS interop boundary.
+// Parse() and Compile() never throw across the JS boundary: failures come
+// back as this shape.
 interface CompileError {
   error: string;
 }
 
-// Mirrors SpinScript.Wasm/Exports.cs Check(): positions are 0-indexed.
+// Mirrors Check() in SpinScript.Core/Json/SpinScriptJson.cs: 0-indexed positions.
 interface Diagnostic {
   severity: 'error' | 'warning';
   code: string;
@@ -50,327 +67,468 @@ interface SpinScriptExports {
   Compile(source: string): string;
 }
 
-const STORAGE_KEY = 'spincode';
 const THEME_STORAGE_KEY = 'spintheme';
 
-// Mirrors spinscript-vscode/syntaxes/spinscript.tmLanguage.json, in the same
-// precedence order (comments/strings/numbers first, punctuation last).
-const TOKEN_REGEX = new RegExp(
-  [
-    String.raw`(?<comment>/\*[\s\S]*?\*/|//.*)`,
-    String.raw`(?<string>"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')`,
-    // A named chord (C4:maj7, G3:7). Before `number` so the quality's
-    // digits aren't highlighted on their own. Mirrors Lexer.TryAddChord.
-    String.raw`(?<chord>\b[A-G][#b]?[0-9]?:[A-Za-z0-9#]+)`,
-    // Must come before `number` so a fraction like `1/4` is captured whole
-    // instead of just matching its numerator.
-    String.raw`(?<fraction>\b[0-9]+/[0-9]+\b)`,
-    String.raw`(?<number>\b[0-9]+(?:\.[0-9]+)?\b)`,
-    String.raw`(?<keyword>\b(?:song|loop|beat|melody|play)\b)`,
-    // A letter A-G, optionally followed by an octave digit (A4), an
-    // accidental (C#, Db), or both (Eb8, F#9). Mirrors Lexer.CheckIsNote.
-    // A lone '_' is a melody rest; inside a name (@main_groove) it isn't.
-    String.raw`(?<rest>(?<![A-Za-z0-9_@])_(?![A-Za-z0-9_]))`,
-    String.raw`(?<note>\b[A-G](?:[#b][0-9]?|[0-9])?\b)`,
-    // A beat grid like x...x..., x|x|x|x, x...|x..x.|.x.xx: a lowercase 'x'
-    // followed by any run of 'x', '.' and '|' with no spaces. Mirrors
-    // Lexer.CheckIsPatternGrid — a digit or other letter in the run falls
-    // back to an identifier/note instead, hence the trailing lookahead.
-    String.raw`(?<patternGrid>\bx[x.|]*(?![A-Za-z0-9_]))`,
-    String.raw`(?<variable>@[A-Za-z][A-Za-z0-9_]*)`,
-    String.raw`(?<parameter>\b[A-Za-z_][A-Za-z0-9_]*\b(?=\s*=))`,
-  ].join('|'),
-  'g',
-);
-
-function escapeHtml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-function highlightSpinScript(code: string): string {
-  let out = '';
-  let lastIndex = 0;
-
-  for (const match of code.matchAll(TOKEN_REGEX)) {
-    out += escapeHtml(code.slice(lastIndex, match.index));
-
-    const tokenType = Object.keys(match.groups!).find((key) => match.groups![key] !== undefined);
-    out += `<span class="tok-${tokenType}">${escapeHtml(match[0])}</span>`;
-
-    lastIndex = match.index! + match[0].length;
-  }
-
-  out += escapeHtml(code.slice(lastIndex));
-
-  // Keeps the overlay's scroll height matching the textarea's when the
-  // code ends with a trailing newline.
-  return out + '\n';
-}
-
-// One number per logical line, matching the textarea's line count. Doesn't
-// account for visually wrapped lines (white-space: pre-wrap), so numbers can
-// drift from the wrapped row once a line is long enough to wrap — an
-// accepted trade-off for a plain <textarea>-based editor.
-function lineNumbers(code: string): string {
-  const count = code.split('\n').length;
-  return Array.from({ length: count }, (_, i) => i + 1).join('\n');
-}
+// How long typing has to pause before the song is saved and re-checked.
+const IDLE_MS = 300;
 
 export class SpinScriptEditor extends LitElement {
   static properties = {
-    code: { state: true },
+    library: { state: true },
     error: { state: true },
     diagnostics: { state: true },
     isPlaying: { state: true },
     ready: { state: true },
     theme: { state: true },
+    docsOpen: { state: true },
+    renamingId: { state: true },
   };
 
-  declare code: string;
+  declare library: SongLibrary;
   declare error: string;
   declare diagnostics: Diagnostic[];
   declare isPlaying: boolean;
   declare ready: boolean;
   declare theme: 'light' | 'dark';
+  declare docsOpen: boolean;
+  declare renamingId: string | null;
 
   #spinscript: SpinScriptExports | null = null;
   #audioContext: AudioContext | null = null;
   #sampleBufferCache = new Map<string, AudioBuffer>();
   #pendingEvents: SpinScriptEvent[] = [];
+  #activeSources = new Set<AudioBufferSourceNode>();
+  #schedulerTimer: ReturnType<typeof setTimeout> | null = null;
+  #idleTimer: ReturnType<typeof setTimeout> | null = null;
+  #unwatchLibrary: (() => void) | null = null;
 
-  static styles = css`
-    :host {
-      display: block;
-      font-family: var(--wa-font-family-body);
-    }
+  static styles = [
+    tokenStyles,
+    css`
+      :host {
+        display: block;
+        font-family: var(--wa-font-family-body);
+      }
 
-    .editor-card {
-      width: 100%;
-    }
+      .editor-card {
+        width: 100%;
+      }
 
-    .editor-card::part(body) {
-      display: flex;
-      flex-direction: column;
-      gap: var(--wa-space-m);
-    }
+      .editor-card::part(body) {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wa-space-s);
+      }
 
-    .card-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: var(--wa-space-m);
-    }
+      .card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: var(--wa-space-m);
+      }
 
-    .card-header h1 {
-      margin: 0;
-      font-size: var(--wa-font-size-l);
-      font-family: var(--wa-font-family-heading);
-    }
+      .card-header h1 {
+        margin: 0;
+        font-size: var(--wa-font-size-l);
+        font-family: var(--wa-font-family-heading);
+      }
 
-    .card-header p {
-      margin: var(--wa-space-3xs) 0 0;
-      color: var(--wa-color-text-quiet);
-      font-size: var(--wa-font-size-s);
-    }
+      .card-header p {
+        margin: var(--wa-space-3xs) 0 0;
+        color: var(--wa-color-text-quiet);
+        font-size: var(--wa-font-size-s);
+      }
 
-    .header-actions {
-      display: flex;
-      align-items: center;
-      flex-shrink: 0;
-      gap: var(--wa-space-s);
-    }
+      .header-actions {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--wa-space-xs);
+      }
 
-    .status-tag {
-      flex-shrink: 0;
-      gap: var(--wa-space-2xs);
-    }
+      .status-tag {
+        flex-shrink: 0;
+        gap: var(--wa-space-2xs);
+      }
 
-    .theme-toggle {
-      font-size: var(--wa-font-size-m);
-    }
+      .status-tag wa-spinner {
+        font-size: 0.85em;
+      }
 
-    .status-tag wa-spinner {
-      font-size: 0.85em;
-    }
+      .example-item {
+        display: flex;
+        flex-direction: column;
+        max-width: 22rem;
+        white-space: normal;
+        line-height: 1.35;
+      }
 
-    .editor {
-      --gutter-width: 3em;
-      position: relative;
-      width: 100%;
-      height: 500px;
-      border: 1px solid var(--wa-color-surface-border);
-      border-radius: var(--wa-border-radius-m);
-      overflow: hidden;
-    }
+      .example-item small {
+        color: var(--wa-color-text-quiet);
+      }
 
-    .gutter {
-      margin: 0;
-      position: absolute;
-      top: 0;
-      left: 0;
-      bottom: 0;
-      width: var(--gutter-width);
-      padding: var(--wa-space-s) var(--wa-space-2xs) var(--wa-space-s) 0;
-      box-sizing: border-box;
-      font-family: var(--wa-font-family-code);
-      font-size: 14px;
-      line-height: 1.5;
-      white-space: pre;
-      text-align: right;
-      color: var(--wa-color-text-quiet);
-      background: var(--wa-color-surface-default);
-      border-right: 1px solid var(--wa-color-surface-border);
-      overflow: hidden;
-      user-select: none;
-      pointer-events: none;
-    }
+      /* Song tabs */
+      .tabs {
+        display: flex;
+        align-items: flex-end;
+        gap: var(--wa-space-3xs);
+        overflow-x: auto;
+        border-bottom: 1px solid var(--wa-color-surface-border);
+        scrollbar-width: thin;
+      }
 
-    .editor pre,
-    .editor textarea {
-      margin: 0;
-      padding: var(--wa-space-s);
-      position: absolute;
-      top: 0;
-      right: 0;
-      bottom: 0;
-      left: var(--gutter-width);
-      width: calc(100% - var(--gutter-width));
-      height: 100%;
-      box-sizing: border-box;
-      font-family: var(--wa-font-family-code);
-      font-size: 14px;
-      line-height: 1.5;
-      white-space: pre-wrap;
-      word-wrap: break-word;
-      overflow: auto;
-      border: none;
-    }
+      .tab {
+        display: flex;
+        align-items: center;
+        gap: var(--wa-space-3xs);
+        flex-shrink: 0;
+        max-width: 14rem;
+        padding: var(--wa-space-2xs) var(--wa-space-2xs) var(--wa-space-2xs) var(--wa-space-s);
+        border: 1px solid transparent;
+        border-bottom: none;
+        border-radius: var(--wa-border-radius-m) var(--wa-border-radius-m) 0 0;
+        color: var(--wa-color-text-quiet);
+        font-size: var(--wa-font-size-s);
+        cursor: pointer;
+        margin-bottom: -1px;
+        background: none;
+        font-family: inherit;
+      }
 
-    #highlight {
-      color: var(--wa-color-text-normal);
-      background: var(--wa-color-surface-default);
-      pointer-events: none;
-    }
+      .tab:hover {
+        color: var(--wa-color-text-normal);
+        background: var(--wa-color-surface-lowered);
+      }
 
-    #spincode {
-      resize: none;
-      background: transparent;
-      color: transparent;
-      caret-color: var(--wa-color-text-normal);
-    }
+      .tab[aria-selected='true'] {
+        color: var(--wa-color-text-normal);
+        background: var(--wa-color-surface-default);
+        border-color: var(--wa-color-surface-border);
+        font-weight: var(--wa-font-weight-semibold);
+      }
 
-    .tok-comment {
-      color: #6a737d;
-      font-style: italic;
-    }
-    .tok-string {
-      color: #22863a;
-    }
-    .tok-number,
-    .tok-fraction {
-      color: #005cc5;
-    }
-    .tok-keyword {
-      color: #d73a49;
-      font-weight: bold;
-    }
-    .tok-note,
-    .tok-chord {
-      color: #0086b3;
-    }
-    .tok-rest {
-      color: #0086b3;
-      opacity: 0.6;
-    }
-    .tok-patternGrid {
-      color: #b08800;
-    }
-    .tok-variable {
-      color: #6f42c1;
-    }
-    .tok-parameter {
-      color: #e36209;
-    }
+      .tab .name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
 
-    .toolbar {
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-    }
+      .tab input {
+        font: inherit;
+        width: 9rem;
+        padding: 0 var(--wa-space-3xs);
+        border: 1px solid var(--wa-color-brand-border-normal);
+        border-radius: var(--wa-border-radius-s);
+        background: var(--wa-color-surface-default);
+        color: var(--wa-color-text-normal);
+      }
 
-    .diagnostics ul {
-      margin: 0;
-      padding-left: 1.25rem;
-    }
-    .diagnostic-position {
-      font-family: var(--wa-font-family-code, monospace);
-      opacity: 0.7;
-    }
-  `;
+      .tab .close {
+        display: inline-grid;
+        place-items: center;
+        width: 1.4em;
+        height: 1.4em;
+        border: none;
+        border-radius: 50%;
+        background: none;
+        color: inherit;
+        cursor: pointer;
+        font-size: 1em;
+        line-height: 1;
+        opacity: 0.6;
+      }
+
+      .tab .close:hover {
+        opacity: 1;
+        background: var(--wa-color-surface-border);
+      }
+
+      .new-tab {
+        flex-shrink: 0;
+        margin-bottom: var(--wa-space-3xs);
+      }
+
+      /* Code editor: a transparent textarea over a highlighted <pre> */
+      .editor {
+        --gutter-width: 3em;
+        position: relative;
+        width: 100%;
+        height: min(60vh, 560px);
+        min-height: 320px;
+        border: 1px solid var(--wa-color-surface-border);
+        border-radius: var(--wa-border-radius-m);
+        overflow: hidden;
+      }
+
+      .gutter {
+        margin: 0;
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: var(--gutter-width);
+        padding: var(--wa-space-s) var(--wa-space-2xs) var(--wa-space-s) 0;
+        box-sizing: border-box;
+        font-family: var(--wa-font-family-code);
+        font-size: 14px;
+        line-height: 1.5;
+        white-space: pre;
+        text-align: right;
+        color: var(--wa-color-text-quiet);
+        background: var(--wa-color-surface-default);
+        border-right: 1px solid var(--wa-color-surface-border);
+        overflow: hidden;
+        user-select: none;
+        pointer-events: none;
+      }
+
+      .editor pre,
+      .editor textarea {
+        margin: 0;
+        padding: var(--wa-space-s);
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: var(--gutter-width);
+        width: calc(100% - var(--gutter-width));
+        height: 100%;
+        box-sizing: border-box;
+        font-family: var(--wa-font-family-code);
+        font-size: 14px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        overflow: auto;
+        border: none;
+      }
+
+      #highlight {
+        color: var(--wa-color-text-normal);
+        background: var(--wa-color-surface-default);
+        pointer-events: none;
+      }
+
+      #spincode {
+        resize: none;
+        background: transparent;
+        color: transparent;
+        caret-color: var(--wa-color-text-normal);
+        outline: none;
+      }
+
+      .toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wa-space-m);
+      }
+
+      .hint {
+        color: var(--wa-color-text-quiet);
+        font-size: var(--wa-font-size-xs);
+      }
+
+      kbd {
+        font-family: var(--wa-font-family-code);
+        font-size: 0.9em;
+        padding: 0 0.3em;
+        border: 1px solid var(--wa-color-surface-border);
+        border-radius: var(--wa-border-radius-s);
+      }
+
+      .diagnostics ul {
+        margin: 0;
+        padding-left: 1.25rem;
+      }
+
+      .diagnostic-position {
+        font-family: var(--wa-font-family-code, monospace);
+        opacity: 0.7;
+      }
+
+      .docs-drawer {
+        --size: 85vh;
+      }
+
+      .docs-drawer::part(body) {
+        padding-top: 0;
+      }
+    `,
+  ];
 
   constructor() {
     super();
-    this.code = '';
+    this.library = loadLibrary();
     this.error = '';
     this.diagnostics = [];
     this.isPlaying = false;
     this.ready = false;
+    this.docsOpen = false;
+    this.renamingId = null;
     // The inline script in index.astro already applied wa-light/wa-dark to
     // <html> before this component upgraded, so just read it back.
     this.theme = document.documentElement.classList.contains('wa-dark') ? 'dark' : 'light';
   }
 
-  #toggleTheme(): void {
-    const next = this.theme === 'dark' ? 'light' : 'dark';
-    this.theme = next;
-    document.documentElement.classList.remove('wa-light', 'wa-dark');
-    document.documentElement.classList.add(next === 'dark' ? 'wa-dark' : 'wa-light');
-    localStorage.setItem(THEME_STORAGE_KEY, next);
+  get #activeSong(): Song {
+    return this.library.songs.find((s) => s.id === this.library.activeId) ?? this.library.songs[0];
   }
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.#unwatchLibrary = watchLibrary((incoming) => this.#mergeExternalLibrary(incoming));
+    window.addEventListener('keydown', this.#handleKeydown);
+    window.addEventListener('pagehide', this.#flush);
     void this.#init();
   }
 
-  async #init(): Promise<void> {
-    // public/wasm/_framework is populated by `npm run sync-wasm` from the
-    // SpinScript.Wasm build output, not part of the TS/Vite module graph. The
-    // URL is built from a variable (not a literal) so Vite's dependency
-    // scanner doesn't try to resolve it as a project file at build time.
-    const dotnetUrl = `${location.origin}/wasm/_framework/dotnet.js`;
-    const { dotnet } = await import(/* @vite-ignore */ dotnetUrl);
-    const { getAssemblyExports } = await dotnet.create();
-    const exports = await getAssemblyExports('SpinScript.Wasm.dll');
-    this.#spinscript = exports.SpinScript.Wasm.Exports as SpinScriptExports;
-    this.ready = true;
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#unwatchLibrary?.();
+    window.removeEventListener('keydown', this.#handleKeydown);
+    window.removeEventListener('pagehide', this.#flush);
+    this.#stop();
+  }
 
-    const savedCode = localStorage.getItem(STORAGE_KEY);
-    if (savedCode) {
-      this.code = savedCode;
-      this.#check(savedCode);
+  async #init(): Promise<void> {
+    try {
+      // public/wasm/_framework is populated by `npm run sync-wasm` from the
+      // SpinScript.Wasm build output, not part of the TS/Vite module graph.
+      // The URL is built from a variable (not a literal) so Vite's
+      // dependency scanner doesn't try to resolve it at build time.
+      const dotnetUrl = `${location.origin}/wasm/_framework/dotnet.js`;
+      const { dotnet } = await import(/* @vite-ignore */ dotnetUrl);
+      const { getAssemblyExports } = await dotnet.create();
+      const exports = await getAssemblyExports('SpinScript.Wasm.dll');
+      this.#spinscript = exports.SpinScript.Wasm.Exports as SpinScriptExports;
+      this.ready = true;
+      this.#check();
+    } catch (e) {
+      console.error(e);
+      this.error = `Couldn't load the SpinScript engine: ${(e as Error).message}`;
     }
   }
 
-  #check(source: string): void {
-    if (!this.#spinscript) return;
+  // ---------------------------------------------------------------------
+  // Songs (tabs)
+  // ---------------------------------------------------------------------
 
+  #commit(library: SongLibrary): void {
+    this.library = library;
+    saveLibrary(library);
+  }
+
+  #updateActive(changes: Partial<Song>): void {
+    const active = this.#activeSong;
+    this.library = {
+      ...this.library,
+      songs: this.library.songs.map((s) => (s.id === active.id ? { ...s, ...changes, updatedAt: Date.now() } : s)),
+    };
+  }
+
+  #select(id: string): void {
+    if (id === this.library.activeId) return;
+    this.#flush();
+    this.#stop();
+    this.#commit({ ...this.library, activeId: id });
+    this.error = '';
+    this.#check();
+  }
+
+  #openSong(name: string, code: string): void {
+    this.#flush();
+    this.#stop();
+    const song = createSong(uniqueName(name, this.library.songs), code);
+    this.#commit({ activeId: song.id, songs: [...this.library.songs, song] });
+    this.error = '';
+    this.#check();
+  }
+
+  #newSong(): void {
+    this.#openSong('Untitled', NEW_SONG_CODE);
+  }
+
+  #close(id: string, event: Event): void {
+    event.stopPropagation();
+    const song = this.library.songs.find((s) => s.id === id);
+    if (!song) return;
+    if (song.code.trim() && !confirm(`Close "${song.name}"? Its code will be deleted from this browser.`)) return;
+
+    const index = this.library.songs.indexOf(song);
+    let songs = this.library.songs.filter((s) => s.id !== id);
+    if (songs.length === 0) songs = [createSong('Untitled', NEW_SONG_CODE)];
+    const activeId = id === this.library.activeId ? songs[Math.min(index, songs.length - 1)].id : this.library.activeId;
+    if (id === this.library.activeId) this.#stop();
+    this.#commit({ activeId, songs });
+    this.#check();
+  }
+
+  #startRename(id: string): void {
+    this.renamingId = id;
+    void this.updateComplete.then(() => {
+      const input = this.shadowRoot!.querySelector<HTMLInputElement>('.tab input');
+      input?.focus();
+      input?.select();
+    });
+  }
+
+  #finishRename(event: Event, save: boolean): void {
+    const id = this.renamingId;
+    if (!id) return;
+    this.renamingId = null;
+    const name = (event.target as HTMLInputElement).value.trim();
+    if (!save || !name) return;
+    this.#commit({
+      ...this.library,
+      songs: this.library.songs.map((s) => (s.id === id ? { ...s, name, updatedAt: Date.now() } : s)),
+    });
+  }
+
+  #handleRenameKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter') this.#finishRename(event, true);
+    if (event.key === 'Escape') this.#finishRename(event, false);
+  }
+
+  // Another browser tab saved: take its songs, but keep this tab's own
+  // selection and don't clobber the song being edited here mid-typing.
+  #mergeExternalLibrary(incoming: SongLibrary): void {
+    const editing = this.#idleTimer !== null ? this.#activeSong : null;
+    const songs = incoming.songs.map((s) => (editing && s.id === editing.id ? editing : s));
+    const activeId = songs.some((s) => s.id === this.library.activeId) ? this.library.activeId : songs[0].id;
+    const codeChanged = this.#activeSong.code !== songs.find((s) => s.id === activeId)?.code;
+    this.library = { activeId, songs };
+    if (codeChanged) this.#check();
+  }
+
+  // ---------------------------------------------------------------------
+  // Editing
+  // ---------------------------------------------------------------------
+
+  #handleInput(event: Event): void {
+    this.#updateActive({ code: (event.target as HTMLTextAreaElement).value });
+    if (this.#idleTimer) clearTimeout(this.#idleTimer);
+    this.#idleTimer = setTimeout(this.#flush, IDLE_MS);
+  }
+
+  // Saves pending edits and re-checks them; bound so it can be a listener.
+  #flush = (): void => {
+    if (this.#idleTimer === null) return;
+    clearTimeout(this.#idleTimer);
+    this.#idleTimer = null;
+    saveLibrary(this.library);
+    this.#check();
+  };
+
+  #check(): void {
+    if (!this.#spinscript) return;
     try {
-      this.diagnostics = JSON.parse(this.#spinscript.Check(source)) as Diagnostic[];
+      this.diagnostics = JSON.parse(this.#spinscript.Check(this.#activeSong.code)) as Diagnostic[];
     } catch (e) {
       console.error(e);
       this.error = (e as Error).message;
     }
-  }
-
-  #handleInput(event: Event): void {
-    this.code = (event.target as HTMLTextAreaElement).value;
-  }
-
-  #handleChange(): void {
-    this.error = '';
-    localStorage.setItem(STORAGE_KEY, this.code);
-    this.#check(this.code);
   }
 
   #handleScroll(event: Event): void {
@@ -378,15 +536,53 @@ export class SpinScriptEditor extends LitElement {
     const pre = this.shadowRoot!.getElementById('highlight')!;
     pre.scrollTop = textarea.scrollTop;
     pre.scrollLeft = textarea.scrollLeft;
-
-    const gutter = this.shadowRoot!.getElementById('gutter')!;
-    gutter.scrollTop = textarea.scrollTop;
+    this.shadowRoot!.getElementById('gutter')!.scrollTop = textarea.scrollTop;
   }
 
-  #ensureAudioContext(): AudioContext {
-    if (!this.#audioContext) {
-      this.#audioContext = new AudioContext();
+  // Tab inserts spaces instead of leaving the editor; Ctrl/Cmd+Enter plays.
+  #handleEditorKeydown(event: KeyboardEvent): void {
+    if (event.key !== 'Tab' || event.ctrlKey || event.metaKey || event.altKey) return;
+    event.preventDefault();
+    const textarea = event.target as HTMLTextAreaElement;
+    textarea.setRangeText('    ', textarea.selectionStart, textarea.selectionEnd, 'end');
+    textarea.dispatchEvent(new Event('input'));
+  }
+
+  #handleKeydown = (event: KeyboardEvent): void => {
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      void this.#togglePlay();
     }
+  };
+
+  #toggleTheme(): void {
+    const next = this.theme === 'dark' ? 'light' : 'dark';
+    this.theme = next;
+    document.documentElement.classList.remove('wa-light', 'wa-dark');
+    document.documentElement.classList.add(next === 'dark' ? 'wa-dark' : 'wa-light');
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, next);
+    } catch {
+      // Not remembered; the toggle still works for this visit.
+    }
+  }
+
+  #handleExampleSelect(event: CustomEvent<{ item: HTMLElement & { value: string } }>): void {
+    const example = examples.find((e) => e.id === event.detail.item.value);
+    if (example) this.#openSong(example.title, example.code);
+  }
+
+  #handleTryCode(event: CustomEvent<{ title: string; code: string }>): void {
+    this.docsOpen = false;
+    this.#openSong(event.detail.title, event.detail.code);
+  }
+
+  // ---------------------------------------------------------------------
+  // Playback
+  // ---------------------------------------------------------------------
+
+  #ensureAudioContext(): AudioContext {
+    this.#audioContext ??= new AudioContext();
     return this.#audioContext;
   }
 
@@ -394,11 +590,11 @@ export class SpinScriptEditor extends LitElement {
     const cached = this.#sampleBufferCache.get(url);
     if (cached) return cached;
 
-    const audioContext = this.#ensureAudioContext();
     const response = await fetch(url);
-    const arrayBuffer = await response.arrayBuffer();
-    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-
+    if (!response.ok) {
+      throw new Error(`Couldn't load sample "${url}" (HTTP ${response.status}).`);
+    }
+    const audioBuffer = await this.#ensureAudioContext().decodeAudioData(await response.arrayBuffer());
     this.#sampleBufferCache.set(url, audioBuffer);
     return audioBuffer;
   }
@@ -408,11 +604,9 @@ export class SpinScriptEditor extends LitElement {
     return new Map(urls.map((url, i) => [url, buffers[i]]));
   }
 
-  // Schedules `buffer` to start playing `delayMs` milliseconds from now (uses
-  // the AudioContext clock, not setTimeout, so timing stays sample-accurate).
-  // `rate` is a melody note's playback rate (1 = original pitch/speed);
-  // omit it for plain sound events.
-  #playSample(buffer: AudioBuffer, delayMs = 0, rate?: number): AudioBufferSourceNode {
+  // Schedules `buffer` on the AudioContext clock (sample-accurate, unlike
+  // setTimeout). `rate` is a melody note's playback rate; omit it for drums.
+  #playSample(buffer: AudioBuffer, delayMs = 0, rate?: number): void {
     const audioContext = this.#ensureAudioContext();
     const source = audioContext.createBufferSource();
     source.buffer = buffer;
@@ -420,75 +614,92 @@ export class SpinScriptEditor extends LitElement {
       source.playbackRate.value = rate;
     }
     source.connect(audioContext.destination);
+    source.onended = () => this.#activeSources.delete(source);
+    this.#activeSources.add(source);
     source.start(audioContext.currentTime + delayMs / 1000);
-    return source;
   }
 
-  async #handlePlay(): Promise<void> {
-    this.error = '';
+  async #togglePlay(): Promise<void> {
+    if (this.isPlaying) {
+      this.#stop();
+    } else {
+      await this.#play();
+    }
+  }
 
-    if (this.isPlaying || !this.#spinscript) return;
+  #stop(): void {
+    if (this.#schedulerTimer) clearTimeout(this.#schedulerTimer);
+    this.#schedulerTimer = null;
+    this.#pendingEvents = [];
+    for (const source of this.#activeSources) {
+      try {
+        source.stop();
+      } catch {
+        // Already stopped.
+      }
+    }
+    this.#activeSources.clear();
+    this.isPlaying = false;
+  }
+
+  async #play(): Promise<void> {
+    this.#flush();
+    this.error = '';
+    if (!this.#spinscript) return;
 
     try {
-      const parsed: unknown = JSON.parse(this.#spinscript.Compile(this.code));
-
+      const parsed: unknown = JSON.parse(this.#spinscript.Compile(this.#activeSong.code));
       if (isCompileError(parsed)) {
         throw new Error(parsed.error);
       }
 
       const result = parsed as CompileResult;
+      const buffers = await this.#loadSamples([...new Set(result.events.map((e) => e.sample))]);
 
-      const uniqueSamples = Object.keys(
-        result.events.reduce((accum, curr) => ({ ...accum, [curr.sample]: true }), {} as Record<string, boolean>),
-      );
-
-      const buffers = await this.#loadSamples(uniqueSamples);
+      const audioContext = this.#ensureAudioContext();
+      await audioContext.resume();
 
       this.isPlaying = true;
       this.#pendingEvents = [...result.events];
-
-      const audioContext = this.#ensureAudioContext();
       const startAudioTime = audioContext.currentTime;
       const lookaheadMs = 300;
       const schedulerIntervalMs = 25;
 
-      const playNextEvents = (): void => {
+      const scheduleNext = (): void => {
         const now = audioContext.currentTime;
 
         this.#pendingEvents = this.#pendingEvents.filter((event) => {
-          const scheduledAt = startAudioTime + event.time / 1000;
-          const timeToStart = (scheduledAt - now) * 1000;
+          const timeToStart = (startAudioTime + event.time / 1000 - now) * 1000;
+          if (timeToStart >= lookaheadMs) return true;
 
-          if (timeToStart < lookaheadMs) {
-            const buffer = buffers.get(event.sample);
-            if (buffer) {
-              const rate = event.type === 'melody' ? event.rate : undefined;
-              this.#playSample(buffer, Math.max(timeToStart, 0), rate);
-            }
-            return false;
+          const buffer = buffers.get(event.sample);
+          if (buffer) {
+            this.#playSample(buffer, Math.max(timeToStart, 0), event.type === 'melody' ? event.rate : undefined);
           }
-
-          return true;
+          return false;
         });
 
-        if (this.#pendingEvents.length === 0 || !this.isPlaying) {
-          this.isPlaying = false;
+        if (this.#pendingEvents.length === 0) {
+          // Everything is scheduled; flip back to "Play" when the song ends.
+          const remainingMs = Math.max(0, startAudioTime * 1000 + result.duration - now * 1000);
+          this.#schedulerTimer = setTimeout(() => this.#stop(), remainingMs + 200);
           return;
         }
 
-        setTimeout(() => {
-          if (!this.isPlaying) return;
-          playNextEvents();
-        }, schedulerIntervalMs);
+        this.#schedulerTimer = setTimeout(scheduleNext, schedulerIntervalMs);
       };
 
-      playNextEvents();
+      scheduleNext();
     } catch (e) {
       console.error(e);
       this.error = (e as Error).message;
-      this.isPlaying = false;
+      this.#stop();
     }
   }
+
+  // ---------------------------------------------------------------------
+  // Rendering
+  // ---------------------------------------------------------------------
 
   #renderDiagnostics(severity: Diagnostic['severity'], variant: 'danger' | 'warning') {
     const items = this.diagnostics.filter((d) => d.severity === severity);
@@ -503,25 +714,68 @@ export class SpinScriptEditor extends LitElement {
     </wa-callout>`;
   }
 
+  #renderTabs() {
+    return html`<div class="tabs" role="tablist" aria-label="Songs">
+      ${this.library.songs.map((song) => {
+        const selected = song.id === this.library.activeId;
+        return html`<div
+          class="tab"
+          role="tab"
+          tabindex=${selected ? 0 : -1}
+          aria-selected=${selected}
+          title=${song.name}
+          @click=${() => this.#select(song.id)}
+          @dblclick=${() => this.#startRename(song.id)}
+          @keydown=${(e: KeyboardEvent) => e.key === 'F2' && this.#startRename(song.id)}
+        >
+          ${this.renamingId === song.id
+            ? html`<input
+                aria-label="Song name"
+                .value=${song.name}
+                @click=${(e: Event) => e.stopPropagation()}
+                @keydown=${this.#handleRenameKeydown}
+                @blur=${(e: Event) => this.#finishRename(e, true)}
+              />`
+            : html`<span class="name">${song.name}</span>`}
+          <button class="close" aria-label="Close ${song.name}" @click=${(e: Event) => this.#close(song.id, e)}>×</button>
+        </div>`;
+      })}
+      <wa-button class="new-tab" size="small" appearance="plain" @click=${this.#newSong} title="New song">+ New</wa-button>
+    </div>`;
+  }
+
   override render() {
     const statusVariant = this.isPlaying ? 'success' : this.ready ? 'neutral' : 'brand';
-    const statusLabel = this.isPlaying ? 'Playing' : this.ready ? 'Ready' : 'Loading WASM…';
+    const statusLabel = this.isPlaying ? 'Playing' : this.ready ? 'Ready' : 'Loading…';
+    const code = this.#activeSong.code;
+    const hasErrors = this.diagnostics.some((d) => d.severity === 'error');
 
     return html`
       <wa-card class="editor-card" appearance="outlined">
         <div slot="header" class="card-header">
           <div>
-            <h1>SpinScript WASM</h1>
-            <p>Type your SpinScript code below:</p>
+            <h1>SpinScript</h1>
+            <p>Music as code — write a beat, press play.</p>
           </div>
           <div class="header-actions">
             <wa-tag class="status-tag" variant=${statusVariant} appearance="filled" size="small" pill>
               ${!this.ready ? html`<wa-spinner></wa-spinner>` : null} ${statusLabel}
             </wa-tag>
+            <wa-dropdown @wa-select=${this.#handleExampleSelect}>
+              <wa-button slot="trigger" size="small" appearance="outlined" with-caret>Examples</wa-button>
+              ${examples.map(
+                (example) => html`<wa-dropdown-item value=${example.id}>
+                  <span class="example-item">
+                    <span>${example.title}</span>
+                    <small>${example.description}</small>
+                  </span>
+                </wa-dropdown-item>`,
+              )}
+            </wa-dropdown>
+            <wa-button size="small" appearance="outlined" @click=${() => (this.docsOpen = true)}>Docs</wa-button>
             <wa-button
-              class="theme-toggle"
-              appearance="outlined"
               size="small"
+              appearance="outlined"
               pill
               @click=${this.#toggleTheme}
               aria-label=${this.theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
@@ -531,15 +785,19 @@ export class SpinScriptEditor extends LitElement {
           </div>
         </div>
 
+        ${this.#renderTabs()}
+
         <div class="editor">
-          <div id="gutter" class="gutter" aria-hidden="true">${lineNumbers(this.code)}</div>
-          <pre id="highlight" aria-hidden="true"><code>${unsafeHTML(highlightSpinScript(this.code))}</code></pre>
+          <div id="gutter" class="gutter" aria-hidden="true">${lineNumbers(code)}</div>
+          <pre id="highlight" aria-hidden="true"><code>${unsafeHTML(highlightSpinScript(code))}</code></pre>
           <textarea
             id="spincode"
             spellcheck="false"
-            .value=${this.code}
+            aria-label="SpinScript code"
+            .value=${code}
             @input=${this.#handleInput}
-            @change=${this.#handleChange}
+            @blur=${this.#flush}
+            @keydown=${this.#handleEditorKeydown}
             @scroll=${this.#handleScroll}
           ></textarea>
         </div>
@@ -550,16 +808,28 @@ export class SpinScriptEditor extends LitElement {
         ${this.#renderDiagnostics('error', 'danger')} ${this.#renderDiagnostics('warning', 'warning')}
 
         <div slot="footer" class="toolbar">
+          <span class="hint">Saved in this browser · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to play</span>
           <wa-button
-            variant="brand"
-            appearance="filled"
-            ?disabled=${!this.ready}
-            @click=${this.#handlePlay}
+            variant=${this.isPlaying ? 'neutral' : 'brand'}
+            appearance="accent"
+            ?disabled=${!this.ready || (hasErrors && !this.isPlaying)}
+            @click=${this.#togglePlay}
           >
             ${this.isPlaying ? 'Stop' : 'Play'}
           </wa-button>
         </div>
       </wa-card>
+
+      <wa-drawer
+        class="docs-drawer"
+        label="SpinScript documentation"
+        placement="bottom"
+        light-dismiss
+        ?open=${this.docsOpen}
+        @wa-after-hide=${(e: Event) => e.target === e.currentTarget && (this.docsOpen = false)}
+      >
+        <spinscript-docs @try-code=${this.#handleTryCode}></spinscript-docs>
+      </wa-drawer>
     `;
   }
 }

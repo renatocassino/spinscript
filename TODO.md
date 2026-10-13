@@ -110,9 +110,18 @@ grupo.
 - [ ] **Formatter** (`spinscript fmt`) — alinhar colunas de melody, por exemplo.
 - [ ] **CLI:** `spinscript play` (tocar no terminal), `spinscript events`
       (dump JSON da timeline), `--watch` para recompilar ao salvar.
-- [ ] **Playground:** mostrar erros inline no editor, piano roll /
-      grid visual sincronizado com o código, cursor seguindo a reprodução,
-      compartilhar música por URL.
+- [x] **Playground:** abas com várias músicas salvas no navegador,
+      exemplos, documentação completa, Play/Stop (Ctrl+Enter), lint
+      enquanto digita.
+- [ ] **Editor com CodeMirror 6:** sublinhar o erro no lugar exato,
+      autocomplete de `@nomes`/parâmetros, undo/redo e indentação de
+      verdade (hoje é um `<textarea>` com realce por cima).
+- [ ] **Playground (resto):** piano roll / grid visual sincronizado com o
+      código, cursor seguindo a reprodução, compartilhar música por URL,
+      exportar/importar `.spin`.
+- [ ] **Aviso de "loop depois de melody":** num mesmo loop, `play @chords;
+      play @drums;` com `@drums` sendo um loop toca a bateria *depois* dos
+      acordes. Os exemplos tropeçaram nisso; vale um warning do analisador.
 - [ ] **Gramática do VS Code gerada/validada** contra o lexer, pra não
       divergir (hoje é mantida à mão).
 - [ ] **Importar MIDI** → gerar `.spin`.

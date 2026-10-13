@@ -7,9 +7,10 @@ import '@awesome.me/webawesome/dist/styles/webawesome.css';
 		<meta charset="utf-8" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 		<link rel="icon" href="/favicon.ico" />
-		<meta name="viewport" content="width=device-width" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="description" content="SpinScript is a small language for writing music as code: beats, melodies, chords and arrangements, played right in your browser." />
 		<meta name="generator" content={Astro.generator} />
-		<title>SpinScript WASM</title>
+		<title>SpinScript Playground</title>
 		<script is:inline>
 			// Applied synchronously, before first paint, to avoid a flash of the
 			// wrong theme. spinscript-editor's toggle button reads this same class
@@ -26,6 +27,29 @@ import '@awesome.me/webawesome/dist/styles/webawesome.css';
 			})();
 		</script>
 		<style>
+			/* Syntax colors, shared by the editor and the docs (lib/highlight.ts). */
+			html.wa-light {
+				--spin-tok-comment: #6a737d;
+				--spin-tok-string: #22863a;
+				--spin-tok-number: #005cc5;
+				--spin-tok-keyword: #d73a49;
+				--spin-tok-note: #0086b3;
+				--spin-tok-grid: #b08800;
+				--spin-tok-variable: #6f42c1;
+				--spin-tok-parameter: #e36209;
+			}
+
+			html.wa-dark {
+				--spin-tok-comment: #8b949e;
+				--spin-tok-string: #7ee787;
+				--spin-tok-number: #79c0ff;
+				--spin-tok-keyword: #ff7b72;
+				--spin-tok-note: #56d4dd;
+				--spin-tok-grid: #e3b341;
+				--spin-tok-variable: #d2a8ff;
+				--spin-tok-parameter: #ffa657;
+			}
+
 			html,
 			body {
 				margin: 0;
@@ -37,13 +61,13 @@ import '@awesome.me/webawesome/dist/styles/webawesome.css';
 			body {
 				display: flex;
 				justify-content: center;
-				padding: var(--wa-space-2xl) var(--wa-space-m);
+				padding: var(--wa-space-xl) var(--wa-space-m);
 				box-sizing: border-box;
 			}
 
 			spinscript-editor {
 				width: 100%;
-				max-width: 860px;
+				max-width: 1080px;
 			}
 		</style>
 	</head>
