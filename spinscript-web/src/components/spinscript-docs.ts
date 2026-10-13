@@ -979,6 +979,13 @@ beat @kicks (sample=@kick808Final) { 1, 9 }`)}
         </li>
         <li><strong>Examples</strong> opens a ready-made song in a new tab — a good place to start tweaking.</li>
         <li>
+          <strong>Export</strong> (next to the player bar) downloads what the bar shows — the song, or the part you
+          last played from its card — as a <strong>WAV</strong> recording that sounds exactly like Play, or as a
+          <strong>MIDI</strong> file for a DAW: one track per sound, melodies with their real notes, drums on channel 10
+          mapped to General MIDI (kick 36, snare 38, closed hat 42…). Both are made in your browser; nothing is
+          uploaded.
+        </li>
+        <li>
           <strong>Your sounds</strong>: drop audio files to use them as samples (see
           <a href="#sounds" @click=${(e: Event) => this.#scrollTo(e, 'sounds')}>Sounds</a>).
         </li>

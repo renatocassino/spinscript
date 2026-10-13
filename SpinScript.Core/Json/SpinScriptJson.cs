@@ -25,7 +25,7 @@ using SpinScript.Parser.Ast;
 /// Check   → [ { "severity": "error" | "warning", "code", "message", "line", "column" }, ... ]
 /// Compile, CompilePart → { "events": [ { "type": "sound", "sample", "time", "velocity" }
 ///                       | { "type": "melody", "sample", "time", "duration", "note", "rate" } ],
-///             "duration": totalMs }
+///             "duration": totalMs, "bpm": 120, "beatsPerBar": 4 }
 /// error   → { "error": "first message", "line": 0, "column": 4,
 ///             "errors": [ { "message", "line", "column", "code" }, ... ] }
 /// </code>
@@ -103,8 +103,9 @@ public static class SpinScriptJson
     {
         try
         {
-            var result = compile(new Compiler(source));
-            return Write(writer => WriteCompileResult(writer, result));
+            var compiler = new Compiler(source);
+            var result = compile(compiler);
+            return Write(writer => WriteCompileResult(writer, result, compiler.Configuration));
         }
         catch (LexerException ex)
         {
@@ -174,7 +175,7 @@ public static class SpinScriptJson
         }
     }
 
-    private static void WriteCompileResult(Utf8JsonWriter writer, CompileResult result)
+    private static void WriteCompileResult(Utf8JsonWriter writer, CompileResult result, SongConfiguration configuration)
     {
         writer.WriteStartObject();
         writer.WriteStartArray("events");
@@ -210,6 +211,9 @@ public static class SpinScriptJson
         writer.WriteEndArray();
         // Whichever ends later: the timeline itself, or a note ringing past it.
         writer.WriteNumber("duration", Math.Max(end, result.Length));
+        // Tempo and meter, for exports that think in beats (MIDI).
+        writer.WriteNumber("bpm", configuration.BPM);
+        writer.WriteNumber("beatsPerBar", configuration.BeatsPerBar);
         writer.WriteEndObject();
     }
 

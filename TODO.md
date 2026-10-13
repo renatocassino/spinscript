@@ -100,7 +100,10 @@ grupo.
 - [ ] **Instrumentos multi-sample:** um sample por faixa de notas em vez
       de um só `rootNote` esticado (soa melhor nos extremos).
 - [ ] **Síntese básica:** `sample=sine`/`saw`/`square` sem precisar de wav.
-- [ ] **Exportar áudio:** CLI gerar `.wav` (render offline) e `.mid` (MIDI).
+- [x] **Exportar áudio no playground:** WAV (render offline no navegador) e
+      MIDI (uma faixa por som, bateria no canal 10).
+- [ ] **Exportar pelo CLI:** `spinscript song.spin --wav out.wav` / `--mid`
+      (no .NET: ler os samples, mudar o tom e mixar sem Web Audio).
 
 ## Ferramentas
 

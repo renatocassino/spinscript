@@ -17,6 +17,7 @@ import './spinscript-timeline';
 import type { Part } from './spinscript-parts';
 import { examples } from '../lib/examples';
 import { Player, type PlayableEvent } from '../lib/player';
+import { buildMidi, download, exportName, renderWav } from '../lib/export';
 import { LOCAL_PREFIX, SoundStore, isLocalUrl, soundVariableName, type SoundInfo } from '../lib/sound-store';
 import { highlightSpinScript, lineNumbers, tokenStyles } from '../lib/highlight';
 import {
@@ -35,6 +36,8 @@ import {
 interface CompileResult {
   events: PlayableEvent[];
   duration: number;
+  bpm: number;
+  beatsPerBar: number;
 }
 
 // What the player bar is showing: the whole song, or one part of it.
@@ -42,6 +45,8 @@ interface Timeline {
   part: string | null;
   events: PlayableEvent[];
   duration: number;
+  bpm: number;
+  beatsPerBar: number;
 }
 
 // The bits of Parse()'s AST the part cards need.
@@ -104,6 +109,7 @@ export class SpinScriptEditor extends LitElement {
     soundsPersistent: { state: true },
     notice: { state: true },
     dropping: { state: true },
+    exporting: { state: true },
   };
 
   declare library: SongLibrary;
@@ -122,6 +128,7 @@ export class SpinScriptEditor extends LitElement {
   declare soundsPersistent: boolean;
   declare notice: string;
   declare dropping: boolean;
+  declare exporting: boolean;
 
   #spinscript: SpinScriptExports | null = null;
   #player = new Player();
@@ -377,8 +384,12 @@ export class SpinScriptEditor extends LitElement {
         gap: var(--wa-space-m);
       }
 
-      .play-button {
+      .play-button,
+      .export {
         flex-shrink: 0;
+      }
+
+      .play-button {
         min-width: 7.5rem;
       }
 
@@ -444,6 +455,7 @@ export class SpinScriptEditor extends LitElement {
     this.soundsPersistent = true;
     this.notice = '';
     this.dropping = false;
+    this.exporting = false;
     this.#player.addEventListener('statechange', () => (this.isPlaying = this.#player.playing));
     this.#player.resolveUrl = (url) => (isLocalUrl(url) ? this.#soundStore.resolve(url) : Promise.resolve(url));
     this.#soundStore.addEventListener('change', () => {
@@ -630,7 +642,7 @@ export class SpinScriptEditor extends LitElement {
     const parsed: unknown = JSON.parse(json);
     if (isCompileError(parsed)) return null;
     const result = parsed as CompileResult;
-    return { part, events: result.events, duration: result.duration };
+    return { part, events: result.events, duration: result.duration, bpm: result.bpm, beatsPerBar: result.beatsPerBar };
   }
 
   #readParts(code: string): Part[] {
@@ -900,6 +912,36 @@ export class SpinScriptEditor extends LitElement {
   }
 
   // ---------------------------------------------------------------------
+  // Export
+  // ---------------------------------------------------------------------
+
+  // Exports whatever the player bar shows: the song, or the part last played.
+  async #export(event: CustomEvent<{ item: HTMLElement & { value: string } }>): Promise<void> {
+    this.#flush();
+    const timeline = this.timeline;
+    if (!timeline || timeline.events.length === 0) return;
+
+    const name = exportName(this.#activeSong.name, timeline.part);
+    this.error = '';
+    this.exporting = true;
+    try {
+      if (event.detail.item.value === 'midi') {
+        download(buildMidi(timeline), `${name}.mid`);
+        this.#say(`Exported ${name}.mid — one track per sound, drums on channel 10.`);
+      } else {
+        const wav = await renderWav(timeline, (events) => this.#player.loadAll(events));
+        download(wav, `${name}.wav`);
+        this.#say(`Exported ${name}.wav (${(wav.size / 1024 / 1024).toFixed(1)} MB).`);
+      }
+    } catch (e) {
+      console.error(e);
+      this.error = `Export failed: ${(e as Error).message}`;
+    } finally {
+      this.exporting = false;
+    }
+  }
+
+  // ---------------------------------------------------------------------
   // Rendering
   // ---------------------------------------------------------------------
 
@@ -1056,6 +1098,23 @@ export class SpinScriptEditor extends LitElement {
             label=${this.timeline?.part ? `Playing only @${this.timeline.part}` : hasErrors ? 'Fix the errors above to play' : 'Song — click anywhere to play from there'}
             @seek=${this.#seek}
           ></spinscript-timeline>
+          <wa-dropdown class="export" @wa-select=${this.#export}>
+            <wa-button
+              slot="trigger"
+              appearance="outlined"
+              with-caret
+              ?loading=${this.exporting}
+              ?disabled=${!this.timeline || this.timeline.events.length === 0}
+              title=${this.timeline?.part ? `Export only @${this.timeline.part}` : 'Export the song'}
+              >Export</wa-button
+            >
+            <wa-dropdown-item value="wav">
+              <span class="example-item"><span>WAV audio</span><small>A recording, exactly as Play sounds</small></span>
+            </wa-dropdown-item>
+            <wa-dropdown-item value="midi">
+              <span class="example-item"><span>MIDI</span><small>Notes and drums, for a DAW</small></span>
+            </wa-dropdown-item>
+          </wa-dropdown>
         </div>
         <div slot="footer" class="hint">Saved in this browser · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> plays the song</div>
       </wa-card>

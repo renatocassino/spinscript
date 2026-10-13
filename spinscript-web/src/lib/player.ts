@@ -12,6 +12,7 @@ export interface PlayableEvent {
   sample: string;
   duration?: number; // ms, melody notes only
   rate?: number; // playback rate, melody notes only
+  note?: string; // e.g. "C#4", melody notes only
 }
 
 interface ScheduledEvent {
@@ -67,9 +68,7 @@ export class Player extends EventTarget {
 
     const context = this.#ensureContext();
     await context.resume();
-    const urls = [...new Set(events.map((e) => e.sample))];
-    const loaded = await Promise.all(urls.map((url) => this.#load(url)));
-    const buffers = new Map(urls.map((url, i) => [url, loaded[i]]));
+    const buffers = await this.loadAll(events);
 
     const from = Math.max(0, Math.min(fromMs, duration));
     this.#queue = events
@@ -147,6 +146,13 @@ export class Player extends EventTarget {
     await this.play([{ type: 'sound', time: 0, sample: url }], buffer.duration * 1000);
   }
 
+  /** Loads (and caches) every sample the events use. */
+  async loadAll(events: PlayableEvent[]): Promise<Map<string, AudioBuffer>> {
+    const urls = [...new Set(events.map((e) => e.sample))];
+    const loaded = await Promise.all(urls.map((url) => this.#load(url)));
+    return new Map(urls.map((url, i) => [url, loaded[i]]));
+  }
+
   #load(url: string): Promise<AudioBuffer> {
     let buffer = this.#buffers.get(url);
     if (!buffer) {
@@ -170,36 +176,53 @@ export class Player extends EventTarget {
   }
 
   #schedule(context: AudioContext, buffer: AudioBuffer, { event, at, offset }: ScheduledEvent): void {
-    const source = context.createBufferSource();
-    source.buffer = buffer;
-    const when = this.#startedAt + at / 1000;
-
-    if (event.type === 'melody') {
-      const rate = event.rate ?? 1;
-      source.playbackRate.value = rate;
-
-      // A note lasts its own duration, not the whole sample.
-      const remaining = Math.max(0, (event.duration ?? 0) - offset) / 1000;
-      if (remaining <= 0) return;
-      const end = when + remaining;
-      const release = Math.min(RELEASE_S, remaining / 2);
-      const gain = context.createGain();
-      gain.gain.setValueAtTime(1, when);
-      gain.gain.setValueAtTime(1, end - release);
-      gain.gain.linearRampToValueAtTime(0, end);
-      source.connect(gain).connect(context.destination);
-
-      // The sample is read `rate` times faster than real time.
-      const bufferOffset = (offset / 1000) * rate;
-      if (bufferOffset >= buffer.duration) return;
-      source.start(when, bufferOffset);
-      source.stop(end + 0.01);
-    } else {
-      source.connect(context.destination);
-      source.start(when);
-    }
-
+    const source = voice(context, context.destination, buffer, event, this.#startedAt + at / 1000, offset);
+    if (!source) return;
     source.onended = () => this.#sources.delete(source);
     this.#sources.add(source);
   }
+}
+
+/**
+ * Starts one event on `context` at `when` (context time, seconds), `offset`
+ * ms into it. Shared by live playback and offline rendering (WAV export),
+ * so an export sounds exactly like Play. Returns the source, or null when
+ * nothing would be heard.
+ */
+export function voice(
+  context: BaseAudioContext,
+  destination: AudioNode,
+  buffer: AudioBuffer,
+  event: PlayableEvent,
+  when: number,
+  offset = 0,
+): AudioBufferSourceNode | null {
+  const source = context.createBufferSource();
+  source.buffer = buffer;
+
+  if (event.type === 'melody') {
+    const rate = event.rate ?? 1;
+    source.playbackRate.value = rate;
+
+    // A note lasts its own duration, not the whole sample.
+    const remaining = Math.max(0, (event.duration ?? 0) - offset) / 1000;
+    // The sample is read `rate` times faster than real time.
+    const bufferOffset = (offset / 1000) * rate;
+    if (remaining <= 0 || bufferOffset >= buffer.duration) return null;
+
+    const end = when + remaining;
+    const release = Math.min(RELEASE_S, remaining / 2);
+    const gain = context.createGain();
+    gain.gain.setValueAtTime(1, when);
+    gain.gain.setValueAtTime(1, end - release);
+    gain.gain.linearRampToValueAtTime(0, end);
+    source.connect(gain).connect(destination);
+    source.start(when, bufferOffset);
+    source.stop(end + 0.01);
+  } else {
+    source.connect(destination);
+    source.start(when);
+  }
+
+  return source;
 }
