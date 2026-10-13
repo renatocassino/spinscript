@@ -26,7 +26,7 @@ const TOKEN_REGEX = new RegExp(
         String.raw`(?<comment>/\*[\s\S]*?\*/|//.*)`,
         String.raw`(?<string>"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')`,
         String.raw`(?<number>\b[0-9]+(?:\.[0-9]+)?\b)`,
-        String.raw`(?<keyword>\b(?:song|loop|pattern|play)\b)`,
+        String.raw`(?<keyword>\b(?:song|loop|beat|melody|play)\b)`,
         String.raw`(?<variable>@[A-Za-z][A-Za-z0-9_]*)`,
         String.raw`(?<parameter>\b[A-Za-z_][A-Za-z0-9_]*\b(?=\s*=))`,
     ].join('|'),
@@ -141,7 +141,7 @@ playButton.addEventListener('click', async () => {
         if (isPlaying) {
             return;
         }
-        const result = JSON.parse(SpinScript.Interpret(textarea.value));
+        const result = JSON.parse(SpinScript.Compile(textarea.value));
         console.log(result);
 
         const uniqueSamples = Object.keys(result.events.reduce((accum, curr) => (
