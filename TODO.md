@@ -119,6 +119,10 @@ grupo.
       verdade (hoje é um `<textarea>` com realce por cima).
 - [x] **Player com linha do tempo** (seek clicando, faixas por som) e um
       card por beat/melody/loop com play só daquela parte.
+- [x] **Sons próprios:** arrastar arquivos de áudio pro playground; ficam
+      no IndexedDB e entram na música como `"local:nome.wav"`.
+- [ ] **Exportar/importar música com os sons `local:`** (um .zip com o
+      `.spin` e os áudios), já que hoje eles só existem no navegador.
 - [ ] **Playground (resto):** piano roll / grid editável sincronizado com
       o código, destacar no editor a linha que está tocando, loop de um
       trecho (A–B), compartilhar música por URL, exportar/importar `.spin`,

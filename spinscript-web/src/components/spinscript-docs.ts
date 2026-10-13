@@ -829,6 +829,26 @@ beat @kicks (sample=@kickPunchy) { 1, 5, 9, 13 }`)}
         )}
       </div>
       <p>Any other URL you can reach works too, as long as its server allows cross-origin requests.</p>
+
+      <h3>Your own sounds</h3>
+      <p>
+        Drag an audio file (WAV, MP3, OGG… up to 25 MB) onto <strong>Your sounds</strong> below the editor — or onto
+        the code itself. It's saved in this browser and added to the open song as a variable named after the file:
+      </p>
+      ${this.#code(`
+// "Kick 808 (final).wav" becomes:
+@kick808Final = "local:kick-808-final.wav";
+
+beat @kicks (sample=@kick808Final) { 1, 9 }`)}
+      <p>
+        <code>local:</code> means "a sound saved in this browser". Use the variable like any other
+        <code>sample</code>; for a melody, set <code>rootNote</code> to the note the recording plays. From the list you
+        can listen to a sound, insert it into another song, copy its line, or delete it.
+      </p>
+      <div class="note">
+        Your sounds stay in this browser only. A song that uses <code>local:</code> sounds won't find them on another
+        computer or browser — drop the same files there again (with the same names) and it plays as before.
+      </div>
     </section>`;
   }
 
@@ -902,6 +922,10 @@ beat @kicks (sample=@kickPunchy) { 1, 5, 9, 13 }`)}
           close the page and come back later. Double-click a tab to rename it.
         </li>
         <li><strong>Examples</strong> opens a ready-made song in a new tab — a good place to start tweaking.</li>
+        <li>
+          <strong>Your sounds</strong>: drop audio files to use them as samples (see
+          <a href="#sounds" @click=${(e: Event) => this.#scrollTo(e, 'sounds')}>Sounds</a>).
+        </li>
         <li>
           The <strong>player bar</strong> shows the song's length before you press play, with one lane per sound.
           Click (or drag) anywhere on it to play from that point; <kbd>←</kbd>/<kbd>→</kbd> jump 2 seconds when it's

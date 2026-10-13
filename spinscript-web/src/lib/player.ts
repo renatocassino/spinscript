@@ -39,6 +39,13 @@ export class Player extends EventTarget {
   #duration = 0;
   #playing = false;
 
+  /**
+   * Turns a sample URL from the song into something fetch() can load —
+   * e.g. "local:my-kick.wav" into the stored file's object URL. Return
+   * null when the sample doesn't exist here.
+   */
+  resolveUrl: (url: string) => Promise<string | null> = async (url) => url;
+
   get playing(): boolean {
     return this.#playing;
   }
@@ -122,10 +129,34 @@ export class Player extends EventTarget {
     return this.#context;
   }
 
+  /** Drops cached audio for URLs starting with `prefix`, so changed files reload. */
+  forget(prefix: string): void {
+    for (const url of [...this.#buffers.keys()]) {
+      if (url.startsWith(prefix)) this.#buffers.delete(url);
+    }
+  }
+
+  /** Decodes audio with the player's own AudioContext (also used to validate files). */
+  decode(data: ArrayBuffer): Promise<AudioBuffer> {
+    return this.#ensureContext().decodeAudioData(data);
+  }
+
+  /** Plays one sample from the start, e.g. to preview a sound. */
+  async preview(url: string): Promise<void> {
+    const buffer = await this.#load(url);
+    await this.play([{ type: 'sound', time: 0, sample: url }], buffer.duration * 1000);
+  }
+
   #load(url: string): Promise<AudioBuffer> {
     let buffer = this.#buffers.get(url);
     if (!buffer) {
-      buffer = fetch(url)
+      buffer = this.resolveUrl(url)
+        .then((resolved) => {
+          if (resolved === null) {
+            throw new Error(`The sound "${url}" isn't saved in this browser. Drop the file into "Your sounds" to add it.`);
+          }
+          return fetch(resolved);
+        })
         .then((response) => {
           if (!response.ok) throw new Error(`Couldn't load sample "${url}" (HTTP ${response.status}).`);
           return response.arrayBuffer();

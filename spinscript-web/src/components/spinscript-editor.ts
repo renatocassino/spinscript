@@ -12,10 +12,12 @@ import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 
 import './spinscript-docs';
 import './spinscript-parts';
+import './spinscript-sounds';
 import './spinscript-timeline';
 import type { Part } from './spinscript-parts';
 import { examples } from '../lib/examples';
 import { Player, type PlayableEvent } from '../lib/player';
+import { LOCAL_PREFIX, SoundStore, isLocalUrl, soundVariableName, type SoundInfo } from '../lib/sound-store';
 import { highlightSpinScript, lineNumbers, tokenStyles } from '../lib/highlight';
 import {
   NEW_SONG_CODE,
@@ -97,6 +99,11 @@ export class SpinScriptEditor extends LitElement {
     timeline: { state: true },
     parts: { state: true },
     loading: { state: true },
+    sounds: { state: true },
+    soundsBusy: { state: true },
+    soundsPersistent: { state: true },
+    notice: { state: true },
+    dropping: { state: true },
   };
 
   declare library: SongLibrary;
@@ -110,9 +117,17 @@ export class SpinScriptEditor extends LitElement {
   declare timeline: Timeline | null;
   declare parts: Part[];
   declare loading: boolean;
+  declare sounds: SoundInfo[];
+  declare soundsBusy: boolean;
+  declare soundsPersistent: boolean;
+  declare notice: string;
+  declare dropping: boolean;
 
   #spinscript: SpinScriptExports | null = null;
   #player = new Player();
+  #soundStore = new SoundStore();
+  #noticeTimer: ReturnType<typeof setTimeout> | null = null;
+  #dropDepth = 0;
   // Which part the player bar follows; null = the whole song.
   #timelinePart: string | null = null;
   #idleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -277,6 +292,22 @@ export class SpinScriptEditor extends LitElement {
         overflow: hidden;
       }
 
+      .editor.dropping {
+        border-color: var(--wa-color-brand-border-loud);
+      }
+
+      .drop-overlay {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        display: grid;
+        place-items: center;
+        background: color-mix(in srgb, var(--wa-color-brand-fill-loud) 12%, transparent);
+        color: var(--wa-color-text-normal);
+        font-weight: var(--wa-font-weight-semibold);
+        pointer-events: none;
+      }
+
       .gutter {
         margin: 0;
         position: absolute;
@@ -408,7 +439,19 @@ export class SpinScriptEditor extends LitElement {
     this.timeline = null;
     this.parts = [];
     this.loading = false;
+    this.sounds = [];
+    this.soundsBusy = false;
+    this.soundsPersistent = true;
+    this.notice = '';
+    this.dropping = false;
     this.#player.addEventListener('statechange', () => (this.isPlaying = this.#player.playing));
+    this.#player.resolveUrl = (url) => (isLocalUrl(url) ? this.#soundStore.resolve(url) : Promise.resolve(url));
+    this.#soundStore.addEventListener('change', () => {
+      this.#player.forget(LOCAL_PREFIX);
+      void this.#refreshSounds();
+    });
+    void this.#refreshSounds();
+    void this.#soundStore.persistent.then((persistent) => (this.soundsPersistent = persistent));
     // The inline script in index.astro already applied wa-light/wa-dark to
     // <html> before this component upgraded, so just read it back.
     this.theme = document.documentElement.classList.contains('wa-dark') ? 'dark' : 'light';
@@ -669,6 +712,140 @@ export class SpinScriptEditor extends LitElement {
   }
 
   // ---------------------------------------------------------------------
+  // Your sounds
+  // ---------------------------------------------------------------------
+
+  async #refreshSounds(): Promise<void> {
+    try {
+      this.sounds = await this.#soundStore.list();
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  #say(message: string): void {
+    this.notice = message;
+    if (this.#noticeTimer) clearTimeout(this.#noticeTimer);
+    this.#noticeTimer = setTimeout(() => (this.notice = ''), 5000);
+  }
+
+  // Saves each dropped file, then adds a variable for it to the open song.
+  async #addFiles(files: File[]): Promise<void> {
+    const audio = files.filter((f) => f.type.startsWith('audio/') || /\.(wav|mp3|ogg|oga|flac|m4a|aac|webm|aif|aiff)$/i.test(f.name));
+    const skipped = files.length - audio.length;
+    this.error = '';
+    this.soundsBusy = true;
+    const added: string[] = [];
+    const failures: string[] = skipped ? [`${skipped} file(s) skipped: not audio.`] : [];
+
+    for (const file of audio) {
+      try {
+        const sound = await this.#soundStore.add(file, (data) => this.#player.decode(data));
+        added.push(this.#insertSound(sound.name));
+      } catch (e) {
+        failures.push((e as Error).message);
+      }
+    }
+
+    this.soundsBusy = false;
+    if (failures.length) this.error = failures.join(' ');
+    if (added.length) this.#say(`Added ${added.join(', ')} to "${this.#activeSong.name}". Use it as sample=${added[0]}.`);
+  }
+
+  /**
+   * Adds `@name = "local:<sound>";` next to the song's other variables and
+   * returns the variable used. A sound the song already references is left
+   * alone; a variable name that's taken gets a number.
+   */
+  #insertSound(soundName: string): string {
+    const url = `${LOCAL_PREFIX}${soundName}`;
+    const code = this.#activeSong.code;
+
+    const existing = new RegExp(`^(@[A-Za-z][A-Za-z0-9_]*)\\s*=\\s*["']${escapeRegExp(url)}["']`, 'm').exec(code);
+    if (existing) return existing[1];
+
+    const base = soundVariableName(soundName);
+    const taken = new Set([...code.matchAll(/^@([A-Za-z][A-Za-z0-9_]*)\s*=/gm)].map((m) => m[1]));
+    let variable = base;
+    for (let n = 2; taken.has(variable); n++) variable = `${base}${n}`;
+    const line = `@${variable} = "${url}";`;
+
+    // After the last top-level assignment that comes before the first
+    // declaration; otherwise right after the file's leading comments.
+    const lines = code.split('\n');
+    const firstDeclaration = lines.findIndex((l) => /^(beat|melody|loop|song)\b/.test(l));
+    const searchEnd = firstDeclaration === -1 ? lines.length : firstDeclaration;
+    let at = -1;
+    for (let i = 0; i < searchEnd; i++) {
+      if (/^@[A-Za-z][A-Za-z0-9_]*\s*=/.test(lines[i])) at = i + 1;
+    }
+    if (at === -1) {
+      at = 0;
+      while (at < lines.length && /^\s*(\/\/.*)?$/.test(lines[at])) at++;
+      lines.splice(at, 0, line, '');
+    } else {
+      lines.splice(at, 0, line);
+    }
+
+    this.#updateActive({ code: lines.join('\n') });
+    saveLibrary(this.library);
+    this.#check();
+    return `@${variable}`;
+  }
+
+  #handleInsertSound(event: CustomEvent<{ name: string }>): void {
+    const before = this.#activeSong.code;
+    const variable = this.#insertSound(event.detail.name);
+    this.#say(before === this.#activeSong.code ? `${variable} is already in this song.` : `Added ${variable} to "${this.#activeSong.name}".`);
+  }
+
+  async #handlePreviewSound(event: CustomEvent<{ name: string }>): Promise<void> {
+    this.error = '';
+    try {
+      await this.#player.preview(`${LOCAL_PREFIX}${event.detail.name}`);
+    } catch (e) {
+      this.error = (e as Error).message;
+    }
+  }
+
+  async #handleRemoveSound(event: CustomEvent<{ name: string }>): Promise<void> {
+    const name = event.detail.name;
+    const usedIn = this.library.songs.filter((s) => s.code.includes(`${LOCAL_PREFIX}${name}`)).map((s) => `"${s.name}"`);
+    const warning = usedIn.length ? ` It's used in ${usedIn.join(', ')}, which won't be able to play it anymore.` : '';
+    if (!confirm(`Delete the sound "${name}" from this browser?${warning}`)) return;
+    this.#player.stop();
+    await this.#soundStore.remove(name);
+  }
+
+  // Dropping audio straight onto the code editor works too.
+  #handleEditorDragEnter(event: DragEvent): void {
+    if (!event.dataTransfer?.types.includes('Files')) return;
+    event.preventDefault();
+    this.#dropDepth++;
+    this.dropping = true;
+  }
+
+  #handleEditorDragOver(event: DragEvent): void {
+    if (!event.dataTransfer?.types.includes('Files')) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  }
+
+  #handleEditorDragLeave(): void {
+    this.#dropDepth = Math.max(0, this.#dropDepth - 1);
+    if (this.#dropDepth === 0) this.dropping = false;
+  }
+
+  #handleEditorDrop(event: DragEvent): void {
+    this.#dropDepth = 0;
+    this.dropping = false;
+    const files = [...(event.dataTransfer?.files ?? [])];
+    if (files.length === 0) return; // plain text drop: let the textarea have it
+    event.preventDefault();
+    void this.#addFiles(files);
+  }
+
+  // ---------------------------------------------------------------------
   // Playback
   // ---------------------------------------------------------------------
 
@@ -812,7 +989,14 @@ export class SpinScriptEditor extends LitElement {
 
         ${this.#renderTabs()}
 
-        <div class="editor">
+        <div
+          class="editor ${this.dropping ? 'dropping' : ''}"
+          @dragenter=${this.#handleEditorDragEnter}
+          @dragover=${this.#handleEditorDragOver}
+          @dragleave=${this.#handleEditorDragLeave}
+          @drop=${this.#handleEditorDrop}
+        >
+          ${this.dropping ? html`<div class="drop-overlay">Drop to add the sound to this song</div>` : null}
           <div id="gutter" class="gutter" aria-hidden="true">${lineNumbers(code)}</div>
           <pre id="highlight" aria-hidden="true"><code>${unsafeHTML(highlightSpinScript(code))}</code></pre>
           <textarea
@@ -830,6 +1014,9 @@ export class SpinScriptEditor extends LitElement {
         ${this.error
           ? html`<wa-callout variant="danger" appearance="outlined" size="small">${this.error}</wa-callout>`
           : null}
+        ${this.notice
+          ? html`<wa-callout variant="success" appearance="outlined" size="small">${this.notice}</wa-callout>`
+          : null}
         ${this.#renderDiagnostics('error', 'danger')} ${this.#renderDiagnostics('warning', 'warning')}
 
         <spinscript-parts
@@ -839,6 +1026,16 @@ export class SpinScriptEditor extends LitElement {
           @play-part=${this.#playPart}
           @stop-part=${() => this.#player.stop()}
         ></spinscript-parts>
+
+        <spinscript-sounds
+          .sounds=${this.sounds}
+          ?busy=${this.soundsBusy}
+          ?persistent=${this.soundsPersistent}
+          @add-files=${(e: CustomEvent<{ files: File[] }>) => this.#addFiles(e.detail.files)}
+          @insert-sound=${this.#handleInsertSound}
+          @preview-sound=${this.#handlePreviewSound}
+          @remove-sound=${this.#handleRemoveSound}
+        ></spinscript-sounds>
 
         <div slot="footer" class="player">
           <wa-button
@@ -878,3 +1075,7 @@ export class SpinScriptEditor extends LitElement {
 }
 
 customElements.define('spinscript-editor', SpinScriptEditor);
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
