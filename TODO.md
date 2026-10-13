@@ -54,7 +54,7 @@ grupo.
 - [ ] **Inversões e voicings:** `C4:maj/E` (baixo na terça), `C4:maj7^1`,
       `strum=1/32` (arpejar o acorde em vez de tocar tudo junto).
 - [ ] **Escalas e graus:** `melody @m (scale="C minor") { 1 0 1/4, 3 +0 1/4 }`.
-- [ ] **Transposição:** `play @lead (transpose=+12)` / `(transpose=-2)`.
+- [x] **Transposição:** `play @lead (transpose=+12)` / `(transpose=-2)`.
 - [x] **Pausas explícitas:** `_ 1/4` (ou `rest 1/4`) em vez de calcular
       o `+offset` na mão.
 - [ ] **Início implícito nas notas:** `C4 1/4` (só duração) valendo

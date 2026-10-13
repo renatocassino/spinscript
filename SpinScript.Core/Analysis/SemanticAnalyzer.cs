@@ -19,6 +19,7 @@ public sealed class SemanticAnalyzer
     {
         PositiveInt,
         WholeNumber,
+        Integer,
         PositiveNumber,
         String,
         Note,
@@ -30,7 +31,7 @@ public sealed class SemanticAnalyzer
     // `instrument` is the compiler's alias for a melody's `sample`.
     private static readonly Dictionary<string, ParamKind> MelodyParams = new() { ["sample"] = ParamKind.String, ["instrument"] = ParamKind.String, ["rootNote"] = ParamKind.Note };
     private static readonly Dictionary<string, ParamKind> LoopParams = new() { ["bars"] = ParamKind.PositiveNumber };
-    private static readonly Dictionary<string, ParamKind> PlayParams = new() { ["repeat"] = ParamKind.WholeNumber };
+    private static readonly Dictionary<string, ParamKind> PlayParams = new() { ["repeat"] = ParamKind.WholeNumber, ["transpose"] = ParamKind.Integer };
     private static readonly Dictionary<string, ParamKind> NoParams = new();
 
     // Parameter names people reach for that mean something else here.
@@ -321,8 +322,14 @@ public sealed class SemanticAnalyzer
         var name = play.PatternName;
         CheckParameters(play.Parameters, PlayParams, $"'play @{name}'", play.Line, play.Column);
 
-        if (_declarations.ContainsKey(name))
+        if (_declarations.TryGetValue(name, out var target))
         {
+            if (target is BeatNode && play.Parameters.ContainsKey("transpose"))
+            {
+                _diagnostics.Add(Diagnostic.Warning("ignored-transpose",
+                    $"'transpose' has no effect on beat '@{name}': beats aren't pitched, only melodies are transposed.",
+                    play.Line, play.Column));
+            }
             return;
         }
 
@@ -387,6 +394,8 @@ public sealed class SemanticAnalyzer
                 ParamKind.PositiveInt when !IsPositiveInt(value) => "must be a whole number of at least 1",
                 ParamKind.WholeNumber when value is not SpinValue.NumberValue { Value: >= 0 } whole || whole.Value != Math.Floor(whole.Value) =>
                     "must be a whole number of at least 0",
+                ParamKind.Integer when value is not SpinValue.NumberValue integer || integer.Value != Math.Floor(integer.Value) =>
+                    "must be a whole number of semitones, like 12 or -2",
                 ParamKind.PositiveNumber when value is not SpinValue.NumberValue { Value: > 0 } => "must be a number greater than 0",
                 ParamKind.String when value is not SpinValue.StringValue => "must be a string",
                 ParamKind.Note when value is not SpinValue.StringValue { Value: var note } || !Lexer.IsNote(note) =>

@@ -63,6 +63,13 @@ public class Lexer
             // A beat grid can also start with a rest ('.', '-') or a bar
             // separator ('|'), e.g. `{ ..x.|x... }`; none of those characters
             // means anything else on its own, so this is unambiguous.
+            // A '-' right before a digit is a sign (transpose=-2), not a grid.
+            if (currentChar == '-' && _index + 1 < _input.Length && char.IsDigit(_input[_index + 1]))
+            {
+                AddToken(TokenType.MINUS, "-");
+                continue;
+            }
+
             if (currentChar is '.' or '-' or '|')
             {
                 if (!TryAddPatternGrid())

@@ -426,4 +426,56 @@ song {
         Assert.Equal(2000.0, new Compiler(source).CompilePart("groove").Length);
         Assert.Equal(2000.0 + 4 * 2000.0, new Compiler(source).Compile().Length);
     }
+
+    private const string Transposed = """
+@bpm = 120;
+@piano = "piano.wav";
+@kick = "kick.wav";
+
+melody @lead (sample=@piano) { C4 0 1/4, [C4 E4] 1/4 1/4 };
+beat @kicks (sample=@kick) { 1 }
+
+loop @verse { play @lead (transpose=12); play @kicks; }
+
+song {
+    PLAYS
+}
+""";
+
+    private static List<MelodyEvent> Notes(string plays) =>
+        new Compiler(Transposed.Replace("PLAYS", plays)).Compile().Events.OfType<MelodyEvent>().ToList();
+
+    [Fact]
+    public void TransposeShiftsNotesBySemitones()
+    {
+        var notes = Notes("play @lead (transpose=-2);");
+
+        Assert.Equal(["A#3", "A#3", "D4"], notes.Select(n => n.Note));
+        Assert.Equal(Math.Pow(2, -2 / 12.0), notes[0].Rate, 6); // relativo ao rootNote C4
+    }
+
+    [Fact]
+    public void NestedTransposesAddUp()
+    {
+        var notes = Notes("play @verse (transpose=2);");
+
+        Assert.Equal(["D5", "D5", "F#5"], notes.Select(n => n.Note));
+    }
+
+    [Fact]
+    public void TransposeOnlyAppliesInsideItsPlay()
+    {
+        var notes = Notes("play @lead (transpose=12); play @lead;");
+
+        Assert.Equal(["C5", "C5", "E5", "C4", "C4", "E4"], notes.Select(n => n.Note));
+    }
+
+    [Fact]
+    public void TransposeDoesNotChangeBeats()
+    {
+        var withTranspose = new Compiler(Transposed.Replace("PLAYS", "play @verse (transpose=5);")).Compile();
+        var without = new Compiler(Transposed.Replace("PLAYS", "play @verse;")).Compile();
+
+        Assert.Equal(without.Events.OfType<SoundEvent>(), withTranspose.Events.OfType<SoundEvent>());
+    }
 }

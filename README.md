@@ -248,7 +248,7 @@ parameter's value):
 
 | Kind | Syntax | Example |
 |---|---|---|
-| Number | digits, optionally with a decimal point | `129`, `0.2` |
+| Number | digits, optionally with a decimal point and a sign | `129`, `0.2`, `-2`, `+12` |
 | String | single or double quotes (interchangeable, no escaping needed to mix them) | `"kick.wav"`, `'kick.wav'` |
 | Boolean | the bare words | `true`, `false` |
 | Reference | `@` followed by a name | `@kickSample` |
@@ -484,10 +484,26 @@ parameters:
 play @groove (repeat=4);
 ```
 
-`repeat` is the one modifier the compiler currently acts on — it plays the
-target that many times in a row. (A bare pattern's repeats are laid out
-one bar apart; a loop's repeats are laid out back-to-back over however
-long each repetition of its body actually takes.)
+Two modifiers are acted on:
+
+- `repeat` plays the target that many times in a row. (A bare pattern's
+  repeats are laid out one bar apart; a loop's repeats are laid out
+  back-to-back over however long each repetition of its body actually
+  takes.)
+- `transpose` shifts every melody note the target plays by a whole number
+  of semitones (`12` = an octave up, `-7` = a fifth down). It works on a
+  melody or a whole loop, nested transposes add up (`+2` around a `+12`
+  plays at `+14`), and the timeline reports the transposed note names.
+  Beats aren't pitched, so a `transpose` on a beat has no effect (the
+  analyzer warns about it).
+
+```spin
+song {
+    play @riff;
+    play @riff (transpose=5);
+    play @chorus (transpose=-12);
+}
+```
 
 **Parallel vs. sequential**, the one non-obvious timing rule: statements
 that reference another `loop` (a nested `loop { }` or `play` of something
@@ -603,6 +619,7 @@ back as `lexer-error` / `syntax-error`: a fraction that divides by zero
 | `silent-note` | a note with duration `0` |
 | `duplicate-step` | the same step twice in one beat |
 | `ignored-assignment` | `@name = value;` inside a `loop`/`song`, which the compiler ignores |
+| `ignored-transpose` | `play @kicks (transpose=2);` on a beat — beats aren't pitched |
 | `redefined-variable` | the same top-level variable assigned twice (the last one wins) |
 
 Parameters and steps don't carry their own position in the AST yet, so

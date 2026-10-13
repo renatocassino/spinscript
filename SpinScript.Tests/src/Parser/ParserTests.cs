@@ -838,4 +838,27 @@ play @song1 (bpm=120, volume=80);
         var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
         Assert.Equal("C4", Assert.Single(melody.Notes).NoteName);
     }
+
+    [Theory]
+    [InlineData("-2", -2.0)]
+    [InlineData("+12", 12.0)]
+    [InlineData("7", 7.0)]
+    public void ParseSignedNumberInParameter(string value, double expected)
+    {
+        var program = new Parser($"song {{ play @m (transpose={value}); }}").Parse();
+
+        Assert.False(program.HasErrors);
+        var song = Assert.IsType<SongNode>(program.Ast.Statements[0]);
+        var play = Assert.IsType<PlayNode>(song.Statements[0]);
+        Assert.Equal(new SpinValue.NumberValue(expected), play.Parameters["transpose"]);
+    }
+
+    [Fact]
+    public void ParseSignedNumberInAssignment()
+    {
+        var program = new Parser("@shift = -5;").Parse();
+
+        var assignment = Assert.IsType<AssignmentNode>(Assert.Single(program.Ast.Statements));
+        Assert.Equal(new SpinValue.NumberValue(-5), assignment.Value);
+    }
 }

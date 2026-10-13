@@ -1202,4 +1202,22 @@ public class TokenizerTests
 
         Assert.DoesNotContain(tokens, t => t.Type == TokenType.REST);
     }
+
+    [Fact]
+    public void TokenizeMinusBeforeADigitAsASign()
+    {
+        var tokens = new Lexer("play @m (transpose=-2);").Tokenize();
+
+        var minus = tokens.Single(t => t.Type == TokenType.MINUS);
+        Assert.Equal(TokenType.NUMBER, tokens[tokens.IndexOf(minus) + 1].Type);
+    }
+
+    [Fact]
+    public void TokenizeMinusInsideAGridIsStillAGrid()
+    {
+        var tokens = new Lexer("beat @k { -x-x }").Tokenize();
+
+        Assert.DoesNotContain(tokens, t => t.Type == TokenType.MINUS);
+        Assert.Contains(tokens, t => t.Type == TokenType.PATTERN_GRID);
+    }
 }

@@ -376,4 +376,34 @@ song {
         // grid=4 at 120 BPM: 1 step = 500ms
         Assert.Equal([0.0, 1000.0], compiler.compileResult.Events.Select(e => ((SoundEvent)e).Time));
     }
+
+    [Theory]
+    [InlineData("transpose=2.5")]
+    [InlineData("transpose=\"up\"")]
+    public void InvalidTransposeIsAnError(string parameter)
+    {
+        var diagnostic = Single(Valid.Replace("play @groove;", $"play @groove ({parameter});"), "invalid-parameter");
+
+        Assert.Contains("semitones", diagnostic.Message);
+    }
+
+    [Fact]
+    public void NegativeTransposeIsValid()
+    {
+        Assert.Empty(Check(Valid.Replace("play @groove;", "play @groove (transpose=-7);")));
+    }
+
+    [Fact]
+    public void TransposeOnABeatIsAWarning()
+    {
+        var diagnostic = Single(Valid.Replace("play @beat;", "play @beat (transpose=3);"), "ignored-transpose");
+
+        Assert.False(diagnostic.IsError);
+    }
+
+    [Fact]
+    public void NegativeRepeatIsAnAnalyzerErrorNow()
+    {
+        Assert.Single(Check(Valid.Replace("play @groove;", "play @groove (repeat=-1);")), d => d.Code == "invalid-parameter");
+    }
 }

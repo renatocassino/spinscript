@@ -662,6 +662,21 @@ public class Parser
         return steps;
     }
 
+    // A value like `12`, `-2` or `+12`. The sign is its own token (PLUS is
+    // also the melody's relative-start '+'), so only a sign directly
+    // followed by a number counts.
+    private bool CheckSignedNumber() =>
+        Check(TokenType.NUMBER) ||
+        ((Check(TokenType.PLUS) || Check(TokenType.MINUS)) &&
+         _index + 1 < _tokens.Count && _tokens[_index + 1].Type == TokenType.NUMBER);
+
+    private SpinValue.NumberValue ConsumeSignedNumber()
+    {
+        var sign = Match(TokenType.MINUS) ? -1 : 1;
+        Match(TokenType.PLUS);
+        return new SpinValue.NumberValue(sign * double.Parse(Consume(TokenType.NUMBER).Value, CultureInfo.InvariantCulture));
+    }
+
     private static int ParseStep(Token token)
     {
         if (!int.TryParse(token.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var step) || step < 1)
@@ -694,9 +709,9 @@ public class Parser
         Consume(TokenType.EQUALS);
 
         SpinValue value;
-        if (Check(TokenType.NUMBER))
+        if (CheckSignedNumber())
         {
-            value = new SpinValue.NumberValue(double.Parse(Consume(TokenType.NUMBER).Value, CultureInfo.InvariantCulture));
+            value = ConsumeSignedNumber();
         } else if (Check(TokenType.STRING_LITERAL))
         {
             value = new SpinValue.StringValue(Consume(TokenType.STRING_LITERAL).Value);
@@ -808,9 +823,9 @@ public class Parser
         if (Check(TokenType.STRING_LITERAL))
         {
             value = new SpinValue.StringValue(Consume(TokenType.STRING_LITERAL).Value);
-        } else if (Check(TokenType.NUMBER))
+        } else if (CheckSignedNumber())
         {
-            value = new SpinValue.NumberValue(double.Parse(Consume(TokenType.NUMBER).Value, CultureInfo.InvariantCulture));
+            value = ConsumeSignedNumber();
         } else if (Check(TokenType.REFERENCE))
         {
             value = new SpinValue.ReferenceValue(Consume(TokenType.REFERENCE).Value);

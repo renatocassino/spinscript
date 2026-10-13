@@ -341,7 +341,7 @@ song {
         </tr>
         <tr>
           <td>Number</td>
-          <td><code>120</code>, <code>0.5</code></td>
+          <td><code>120</code>, <code>0.5</code>, <code>-2</code></td>
         </tr>
         <tr>
           <td>String</td>
@@ -735,8 +735,36 @@ song {
             bar, a melody every whole number of bars it spans, a loop every time its body ends.
           </td>
         </tr>
+        <tr>
+          <td><code>transpose</code></td>
+          <td><code>0</code></td>
+          <td>
+            Shift every melody note by this many semitones: <code>12</code> is an octave up, <code>-7</code> a fifth
+            down. Works on a melody or a whole loop; nested transposes add up. Beats aren't pitched, so they stay as
+            they are.
+          </td>
+        </tr>
       </table>
       <p><code>play</code> can target any top-level <code>beat</code>, <code>melody</code> or <code>loop</code>.</p>
+      <h3>Transposing</h3>
+      <p>Write a riff once, then play it in other keys — here the same phrase climbs C, F, G and back:</p>
+      ${this.#code(
+        `
+@piano = "${PIANO}";
+
+melody @riff (sample=@piano, rootNote="C3") {
+    C4 0 1/8, E4 +0 1/8, G4 +0 1/8, C5 +0 1/8,
+    G4 +0 1/8, E4 +0 1/8, C4 +0 1/4,
+};
+
+song {
+    play @riff;
+    play @riff (transpose=5);    // F
+    play @riff (transpose=7);    // G
+    play @riff (transpose=-12);  // an octave down
+}`,
+        'Transpose',
+      )}
     </section>`;
   }
 

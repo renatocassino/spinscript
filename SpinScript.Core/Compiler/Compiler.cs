@@ -29,6 +29,10 @@ public class Compiler
 
     private double _currentTime; // in milliseconds
 
+    // Semitones added to every melody note, from `play (transpose=N)`.
+    // Nested plays add up: a +2 loop playing a +12 melody plays it at +14.
+    private int _transpose;
+
     /// <summary>
     /// Warnings from the last successful <see cref="Compile"/>. When there
     /// are errors, <see cref="Compile"/> throws a <see cref="CompilerException"/>
@@ -170,6 +174,7 @@ public class Compiler
         _song = null;
         _program = null;
         _currentTime = 0;
+        _transpose = 0;
         _compileResult = new CompileResult([]);
     }
 
@@ -308,13 +313,22 @@ public class Compiler
         }
 
         var repeatCount = GetWholeNumber(play.Parameters, "repeat", 1, play, min: 0);
+        var transpose = GetWholeNumber(play.Parameters, "transpose", 0, play, min: int.MinValue);
 
         // Each repetition picks up where the previous one ended: a beat
         // advances one bar, a melody as many whole bars as it lasts, and a
         // loop however long its own body takes (see CompileLoop).
-        for (var i = 0; i < repeatCount; i++)
+        _transpose += transpose;
+        try
         {
-            CompileStatement(target);
+            for (var i = 0; i < repeatCount; i++)
+            {
+                CompileStatement(target);
+            }
+        }
+        finally
+        {
+            _transpose -= transpose;
         }
     }
 
@@ -426,9 +440,11 @@ public class Compiler
         {
             var start = FractionToTime(note.FractionStart);
             var duration = FractionToTime(note.FractionDuration);
-            var rate = CalcRate(note.NoteName, rootNote);
+            // Transposed notes are reported by their new name (C4 +2 -> D4).
+            var noteName = _transpose == 0 ? note.NoteName : Pitch.FromMidi(Pitch.ToMidi(note.NoteName) + _transpose);
+            var rate = CalcRate(noteName, rootNote);
 
-            _compileResult.Events.Add(new MelodyEvent(sample, _currentTime + start, duration, note.NoteName, rate));
+            _compileResult.Events.Add(new MelodyEvent(sample, _currentTime + start, duration, noteName, rate));
             melodyEnd = Math.Max(melodyEnd, start + duration);
         }
 
@@ -560,7 +576,9 @@ public class Compiler
         {
             null => fallback,
             SpinValue.NumberValue n when n.Value >= min && n.Value == Math.Floor(n.Value) => (int)n.Value,
-            var other => throw Error(node, $"Parameter '{key}' must be a whole number of at least {min}, got {other}."),
+            var other => throw Error(node, min == int.MinValue
+                ? $"Parameter '{key}' must be a whole number, got {other}."
+                : $"Parameter '{key}' must be a whole number of at least {min}, got {other}."),
         };
     }
 

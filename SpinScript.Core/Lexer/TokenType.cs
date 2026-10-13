@@ -28,4 +28,5 @@ public enum TokenType
     LBRACKET, // '[' de um acorde explícito: [C4 E4 G4]
     RBRACKET,
     REST, // '_' — pausa numa melody: _ 1/4
+    MINUS, // '-' antes de um número: transpose=-2
 }
