@@ -1,6 +1,6 @@
 namespace SpinScript.Compiler;
 
-using System.Diagnostics.Contracts;
+using SpinScript.Analysis;
 using SpinScript.Parser;
 using SpinScript.Parser.Ast;
 
@@ -23,6 +23,13 @@ public class Compiler
 
     private int _currentTime = 0; // in milliseconds
 
+    /// <summary>
+    /// Warnings from the last successful <see cref="Compile"/>. When there
+    /// are errors, <see cref="Compile"/> throws a <see cref="CompilerException"/>
+    /// carrying all diagnostics instead.
+    /// </summary>
+    public IReadOnlyList<Diagnostic> Diagnostics { get; private set; } = [];
+
     public Compiler(string input)
     {
         _input = input;
@@ -34,8 +41,16 @@ public class Compiler
         var ast = _parser.Parse();
         if (ast.HasErrors)
         {
-            throw new CompilerException(ast.Errors);
+            throw new CompilerException(ast.Errors.Select(Diagnostic.FromParserException).ToList());
         }
+
+        var diagnostics = SemanticAnalyzer.Analyze(ast.Ast);
+        if (diagnostics.Any(diagnostic => diagnostic.IsError))
+        {
+            throw new CompilerException(diagnostics);
+        }
+        Diagnostics = diagnostics;
+
         RegisterStatements(ast.Ast);
         UpdateConfiguration();
         CompileStatements();
@@ -146,7 +161,7 @@ public class Compiler
                 var isLoop = _loops.ContainsKey(play.PatternName);
                 var isBeat = _beats.ContainsKey(play.PatternName);
                 var isMelody = _melodies.ContainsKey(play.PatternName);
-                var parameters = play.Parameters;
+                var parameters = ResolveParameters(play.Parameters);
 
                 var repeatCount = 1;
                 if (parameters.ContainsKey("repeat"))
@@ -201,8 +216,9 @@ public class Compiler
 
     public void CompileLoop(LoopNode loop)
     {
-        var explicitBars = loop.Parameters.ContainsKey("bars")
-            ? loop.Parameters["bars"].AsInt()
+        var loopParameters = ResolveParameters(loop.Parameters);
+        var explicitBars = loopParameters.ContainsKey("bars")
+            ? loopParameters["bars"].AsInt()
             : (int?)null;
         var startTime = _currentTime;
         var furthestTime = startTime;
@@ -264,23 +280,10 @@ public class Compiler
 
     public int CompileMelody(MelodyNode melody)
     {
-        var parameters = melody.Parameters;
+        var parameters = ResolveParameters(melody.Parameters);
 
         var rootNote = parameters.ContainsKey("rootNote") ? parameters["rootNote"].AsString() : "C4";
         var sample = parameters.ContainsKey("sample") ? parameters["sample"].AsString() : null;
-        if (sample != null && sample.StartsWith("@"))
-        {
-            var referencedBeatName = sample.Substring(1);
-            if (_references.ContainsKey(referencedBeatName))
-            {
-                var referencedPattern = _references[referencedBeatName];
-                sample = referencedPattern.AsString();
-            }
-            else
-            {
-                throw new InvalidOperationException($"Referenced beat '{referencedBeatName}' not found.");
-            }
-        }
 
         var barMs = _songConfiguration.BarDurationMs;
         Console.WriteLine($"[DEBUG] - {barMs} - {melody.Notes}");
@@ -348,27 +351,13 @@ public class Compiler
 
     public int CompileBeat(BeatNode beat)
     {
-        var parameters = beat.Parameters;
+        var parameters = ResolveParameters(beat.Parameters);
 
         var bpm = _songConfiguration.BPM;
         var beatsPerBar = _songConfiguration.beatsPerBar;
 
         var sample = parameters.ContainsKey("sample") ? parameters["sample"].AsString() : null;
         Console.WriteLine($">>>>>>>>>>Compiling Pattern: {beat.Name} - Sample: {sample} - BPM: {bpm} - BeatsPerBar: {beatsPerBar}");
-        // se sample começar com @, então é uma referência a um pattern, e não um sample direto
-        if (sample != null && sample.StartsWith("@"))
-        {
-            var referencedBeatName = sample.Substring(1);
-            if (_references.ContainsKey(referencedBeatName))
-            {
-                var referencedPattern = _references[referencedBeatName];
-                sample = referencedPattern.AsString();
-            }
-            else
-            {
-                throw new InvalidOperationException($"Referenced beat '{referencedBeatName}' not found.");
-            }
-        }
         var grid = parameters.ContainsKey("grid") ? parameters["grid"].AsInt() : 16;
         var beatMs = _songConfiguration.BeatDurationMs;
         var barMs = _songConfiguration.BarDurationMs;
@@ -386,4 +375,16 @@ public class Compiler
 
         return (int)_songConfiguration.BarDurationMs;
     }
+
+    // A parameter written as `key=@name` reaches the AST as the string
+    // "@name"; swap it for the top-level variable's value. The semantic
+    // analyzer has already rejected references that don't resolve.
+    private Dictionary<string, SpinValue> ResolveParameters(Dictionary<string, SpinValue> parameters) =>
+        parameters.ToDictionary(
+            parameter => parameter.Key,
+            parameter => parameter.Value is SpinValue.StringValue { Value: var text }
+                && text.StartsWith('@')
+                && _references.TryGetValue(text[1..], out var resolved)
+                    ? resolved
+                    : parameter.Value);
 }

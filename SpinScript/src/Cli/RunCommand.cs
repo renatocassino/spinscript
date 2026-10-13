@@ -2,6 +2,7 @@ namespace SpinScript.Cli;
 
 using Spectre.Console;
 using Spectre.Console.Cli;
+using SpinScript.Analysis;
 using SpinScript.Lexer;
 using SpinScript.Parser;
 using SpinScript.Parser.Ast;
@@ -18,34 +19,66 @@ public sealed class RunCommand : Command<RunSettings>
 
         AnsiConsole.Write(new Rule($"[bold aqua]SpinScript[/] · {Markup.Escape(sourceLabel)}").LeftJustified());
 
-        ProgramNode program;
+        ParseResult parsed;
         try
         {
-            var compiled = new Parser(source).Parse();
-            if (compiled.HasErrors)
-            {
-                var firstError = compiled.Errors[0];
-                WriteErrorPanel("Error in interpreter", firstError.Message);
-                return 1;
-            }
-
-            program = compiled.Ast;
+            parsed = new Parser(source).Parse();
         }
         catch (LexerException ex)
         {
-            WriteErrorPanel("Erro léxico", ex.Message);
+            WriteDiagnostics([Diagnostic.FromLexerException(ex)], source);
             return 1;
         }
-        catch (ParserException ex)
+
+        if (parsed.HasErrors)
         {
-            WriteErrorPanel("Erro de sintaxe", ex.Message);
+            WriteDiagnostics(parsed.Errors.Select(Diagnostic.FromParserException).ToList(), source);
             return 1;
         }
+
+        var program = parsed.Ast;
+        var diagnostics = SemanticAnalyzer.Analyze(program);
 
         WriteAst(program, sourceLabel);
-        AnsiConsole.MarkupLine($"[green]✓[/] {program.Statements.Count} statement(s) reconhecido(s). [grey](ainda não há interpretador — apenas o parser está implementado)[/]");
+        WriteDiagnostics(diagnostics, source);
 
+        if (diagnostics.Any(diagnostic => diagnostic.IsError))
+        {
+            return 1;
+        }
+
+        var warnings = diagnostics.Count;
+        AnsiConsole.MarkupLine($"[green]✓[/] {program.Statements.Count} statement(s), {warnings} warning(s).");
         return 0;
+    }
+
+    private static void WriteDiagnostics(IReadOnlyList<Diagnostic> diagnostics, string source)
+    {
+        if (diagnostics.Count == 0)
+        {
+            return;
+        }
+
+        var lines = source.Split('\n');
+        foreach (var diagnostic in diagnostics)
+        {
+            var (color, label) = diagnostic.IsError ? ("red", "error") : ("yellow", "warning");
+            AnsiConsole.MarkupLine(
+                $"[{color} bold]{label}[/] [grey]{diagnostic.Line + 1}:{diagnostic.Column + 1}[/] {Markup.Escape(diagnostic.Message)} [grey]({diagnostic.Code})[/]");
+
+            if (diagnostic.Line < lines.Length)
+            {
+                var text = lines[diagnostic.Line].TrimEnd('\r');
+                AnsiConsole.MarkupLine($"  [grey]│[/] {Markup.Escape(text)}");
+                AnsiConsole.MarkupLine($"  [grey]│[/] {new string(' ', Math.Min(diagnostic.Column, text.Length))}[{color}]^[/]");
+            }
+        }
+
+        var errors = diagnostics.Count(diagnostic => diagnostic.IsError);
+        if (errors > 0)
+        {
+            AnsiConsole.MarkupLine($"[red]✗[/] {errors} error(s), {diagnostics.Count - errors} warning(s).");
+        }
     }
 
     private static (string source, string label, bool ok) LoadSource(string input)
@@ -144,17 +177,5 @@ public sealed class RunCommand : Command<RunSettings>
 
         return $"[magenta]play[/] [yellow]@{Markup.Escape(play.PatternName)}[/] " +
                $"[grey]({Markup.Escape(parameters)})[/]";
-    }
-
-    private static void WriteErrorPanel(string title, string message)
-    {
-        var panel = new Panel(Markup.Escape(message))
-        {
-            Header = new PanelHeader($"[red bold]{title}[/]"),
-            Border = BoxBorder.Rounded,
-            BorderStyle = new Style(Color.Red),
-        };
-
-        AnsiConsole.Write(panel);
     }
 }

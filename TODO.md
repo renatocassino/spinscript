@@ -12,27 +12,33 @@ grupo.
       subtrai 1 dos dois formatos, então `{ x... }` dispara um step antes
       (e o primeiro `x` cai *antes* do compasso). Normalizar no parser ou
       no compilador e cobrir com teste.
-- [ ] **Parâmetros aceitos mas ignorados.** `swing`, `instrument` e os
+- [x] **Parâmetros aceitos mas ignorados.** `swing`, `instrument` e os
       parâmetros por nota de `melody` parseiam, mas o compilador não lê.
       Ou implementar, ou emitir *warning* de "parâmetro desconhecido".
+      (Feito: o analisador emite `unknown-parameter`. Implementar cada um
+      continua nas seções abaixo.)
 - [ ] **`SoundEvent.Velocity`** existe no evento mas não tem como ser
       definido pela linguagem.
-- [ ] **CLI só mostra o AST.** A mensagem "ainda não há interpretador"
-      está desatualizada — o `run` deveria compilar e mostrar a timeline
-      de eventos (e só reportar o primeiro erro hoje; mostrar todos).
+- [ ] **CLI só mostra o AST.** Já mostra todos os diagnósticos, mas o
+      `run` ainda deveria compilar e mostrar a timeline de eventos.
 - [ ] **Mensagens de erro misturam PT e EN** ("Erro léxico" vs.
       "Error in interpreter"). Escolher um idioma.
 
 ## Análise semântica
 
-- [ ] Passo de validação entre parser e compilador: referência a
+- [x] Passo de validação entre parser e compilador: referência a
       `@nome` não declarado, `play` de algo que não é beat/melody/loop,
       tipo errado de parâmetro (`grid="abc"`), step fora do grid
       (`{ 17 }` com `grid=16`), nota com duração 0.
-- [ ] Detectar ciclos (`loop @a { play @b; }` / `loop @b { play @a; }`).
-- [ ] *Warnings* além de erros: declaração nunca tocada, variável não
+- [x] Detectar ciclos (`loop @a { play @b; }` / `loop @b { play @a; }`).
+- [x] *Warnings* além de erros: declaração nunca tocada, variável não
       usada, parâmetro desconhecido.
-- [ ] Erros de compilação com `Line`/`Column`, igual lexer/parser.
+- [x] Erros de compilação com `Line`/`Column`, igual lexer/parser.
+- [ ] Posição própria para parâmetros e steps no AST, pra o diagnóstico
+      apontar pro `grid=0` em vez do `@nome` da declaração.
+- [ ] Exemplos quebrados que o analisador encontrou: `song.spin` toca
+      `@firstPhase` declarado dentro de um loop; `exemplo-completo.spin`
+      faz `play @vinil` (uma variável) e usa `instrument=` em vez de `sample=`.
 
 ## Expressividade musical
 
@@ -69,6 +75,9 @@ grupo.
       ter uma "biblioteca padrão" de grooves.
 - [ ] **Marcadores / seções nomeadas** no `song` para pular direto
       (`play @chorus from=bar 9`).
+- [ ] **Refactor dos samples do playground** (`public/samples/molla/`):
+      nomes curtos e sem espaços (`/samples/kick/punchy.wav`), confirmar a
+      licença do pack.
 - [ ] **Escapes em strings** (`"\"`) e strings multilinha, se fizer falta.
 
 ## Áudio / mixagem

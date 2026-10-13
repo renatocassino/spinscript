@@ -128,8 +128,8 @@ Every front end drives the same three-stage pipeline in `SpinScript.Core`:
 | Project | What it is | How it uses Core |
 |---|---|---|
 | `SpinScript.Tests` | xUnit test suite (`TokenizerTests`, `ParserTests`, `CompilerTests`) | Calls `Lexer`/`Parser`/`Compiler` directly |
-| `SpinScript` | CLI (`spinscript <file.spin>`), built on `Spectre.Console.Cli` | `RunCommand` parses a file and pretty-prints the AST as a tree (`WriteAst`); a syntax error is shown in a panel instead of a stack trace |
-| `SpinScript.Wasm` | `SpinScript.Core` compiled to `browser-wasm` via .NET's WebAssembly SDK | Exposes two `[JSExport]` functions, `Parse(source)` and `Compile(source)`, each returning JSON (AST or event list, or `{error, line, column}` on failure) |
+| `SpinScript` | CLI (`spinscript <file.spin>`), built on `Spectre.Console.Cli` | `RunCommand` parses and analyzes a file, pretty-prints the AST as a tree (`WriteAst`), and lists every error and warning with its line, column and source excerpt; exits with `1` when there are errors |
+| `SpinScript.Wasm` | `SpinScript.Core` compiled to `browser-wasm` via .NET's WebAssembly SDK | Exposes three `[JSExport]` functions returning JSON: `Parse(source)` (AST), `Check(source)` (every diagnostic, see [Errors and diagnostics](#errors-and-diagnostics)) and `Compile(source)` (event list, or `{error, line, column, diagnostics}` on failure) |
 | `spinscript-web` | Astro site hosting a browser playground | The `<spinscript-editor>` Lit component loads the WASM build at runtime, does its own syntax highlighting (a regex mirroring the VS Code grammar), calls `Compile()`, and schedules the resulting events on the Web Audio API clock to actually play them |
 | `spinscript-vscode` | VS Code extension | Registers the `.spin` language and a TextMate grammar (`syntaxes/spinscript.tmLanguage.json`) for syntax highlighting — no language server, no diagnostics from the real parser (yet) |
 
@@ -494,6 +494,48 @@ to the next statement boundary, and keeps going — so one call can report
 several unrelated mistakes in a single pass, each pointing at its own
 correct location, instead of stopping cold at the first typo.
 
+Once a file parses, the **semantic analyzer** (`SpinScript.Core/Analysis/`)
+checks that it actually makes sense before the compiler runs. It never
+throws: every problem becomes a `Diagnostic` (severity, a stable `Code`,
+message, line, column), all of them reported in one pass, sorted by
+position. `SemanticAnalyzer.Check(source)` runs the whole lexer → parser →
+analyzer chain and returns every diagnostic; `Compiler.Compile()` runs the
+analyzer itself and throws a `CompilerException` carrying all diagnostics
+when there's at least one error (warnings from a successful compile are on
+`Compiler.Diagnostics`). The CLI and the playground both show the full list.
+
+**Errors** — the compiler would crash or produce nonsense:
+
+| Code | Example |
+|---|---|
+| `unknown-reference` | `play @groov;` when only `@groove` exists (suggests the closest name); `play @kickSample;` on a variable; `play` of a beat/loop declared *inside* another loop (only top-level declarations can be played); `sample=@missing` |
+| `invalid-parameter` | `grid="abc"`, `grid=0`, `bars=2.5`, `repeat="2"`, `rootNote="C"` — checked through `@variable` references too |
+| `step-out-of-grid` | `{ 17 }` with `grid=16`, `{ 0 }`, or a grid row longer than `grid` |
+| `invalid-note` | a melody note without an octave (`A` instead of `A4`) |
+| `invalid-time` | a note start/duration that divides by zero (`1/0`) |
+| `cycle` | `loop @a { play @b; }` + `loop @b { play @a; }` — reported at the `play` that closes the cycle, with the path (`@a → @b → @a`) |
+| `missing-song` / `duplicate-song` | no `song` block, or more than one |
+| `play-outside-loop` | a `play` at the top level of the file |
+| `duplicate-declaration` | two beats/melodies/loops with the same name |
+| `invalid-config` | `@bpm = 0;`, `@bpm = "fast";`, `@beatsPerBar = 3.5;` |
+
+**Warnings** — the file compiles, but something in it has no effect:
+
+| Code | Example |
+|---|---|
+| `unused-declaration` | a beat/melody/loop that the `song` never reaches |
+| `unused-variable` | a variable nothing references (`@bpm`/`@beatsPerBar` excepted) |
+| `unknown-parameter` | a parameter the compiler doesn't read yet (`swing`, `volume`, `instrument`, per-note parameters…), with a "did you mean" for typos like `grdi` |
+| `missing-sample` | a beat/melody with no `sample` — it won't make a sound |
+| `silent-note` | a note with duration `0` |
+| `duplicate-step` | the same step twice in one beat |
+| `ignored-assignment` | `@name = value;` inside a `loop`/`song`, which the compiler ignores |
+| `redefined-variable` | the same top-level variable assigned twice (the last one wins) |
+
+Parameters and steps don't carry their own position in the AST yet, so
+their diagnostics point at the `@name` of the beat/melody/loop/`play` they
+belong to; notes point at the note itself.
+
 ### Grammar summary
 
 What's legal where, at a glance:
@@ -536,7 +578,7 @@ melody @minhaAutoria (instrument=@piano) {
 
 > Note: this file's melody parameter is `instrument=@piano`. The compiler
 > currently only reads `sample`/`rootNote` off a `melody`'s parameters —
-> `instrument` parses fine but isn't consumed yet, so new code should use
+> `instrument` parses fine but isn't consumed yet (the analyzer warns about it), so new code should use
 > `sample=@piano` instead.
 
 And the arrangement that plays it, from the same file — a `loop` used

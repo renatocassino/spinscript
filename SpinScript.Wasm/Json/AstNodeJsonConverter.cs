@@ -57,6 +57,7 @@ public sealed class AstNodeJsonConverter : JsonConverter<AstNode>
                 break;
             case SongNode song:
                 writer.WriteString("type", "song");
+                WriteParameters(writer, "parameters", song.Parameters, options);
                 WriteStatements(writer, "statements", song.Statements, options);
                 WriteLocation(writer, song.Line, song.Column);
                 break;

@@ -4,7 +4,7 @@ public abstract record AstNode;
 
 public record ProgramNode(List<AstNode> Statements) : AstNode;
 
-public record Note(string NoteName, string FractionStart, string FractionDuration, Dictionary<string, SpinValue> Parameters);
+public record Note(string NoteName, string FractionStart, string FractionDuration, Dictionary<string, SpinValue> Parameters, int Line = 0, int Column = 0);
 
 public record SpinValue
 {
@@ -50,4 +50,4 @@ public record LoopNode(string Name, Dictionary<string, SpinValue> Parameters, Li
 
 public record PlayNode(string PatternName, Dictionary<string, SpinValue> Parameters, int Line, int Column) : AstNode;
 
-public record SongNode(List<AstNode> Statements, int Line, int Column) : AstNode;
+public record SongNode(Dictionary<string, SpinValue> Parameters, List<AstNode> Statements, int Line, int Column) : AstNode;

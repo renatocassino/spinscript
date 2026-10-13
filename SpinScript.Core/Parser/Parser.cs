@@ -222,12 +222,12 @@ public class Parser
     /// <c>"song { play @intro; @volume = 80; }"</c> → <c>SongNode</c> with
     /// two statements: a <see cref="PlayNode"/> and an <see cref="AssignmentNode"/>.<br/>
     /// <c>"song (bpm=129) { }"</c> → <c>SongNode</c> with an empty body
-    /// (the <c>bpm</c> parameter is currently parsed but discarded).
+    /// (the <c>bpm</c> parameter is kept in the AST but not used by the compiler).
     /// </example>
     public SongNode ParseSong()
     {
         var songToken = Consume(TokenType.SONG);
-        ParseParams();
+        var parameters = ParseParams();
         Consume(TokenType.LBRACE);
 
         var statements = new List<AstNode>();
@@ -249,7 +249,7 @@ public class Parser
 
         Consume(TokenType.RBRACE);
 
-        return new SongNode(statements, songToken.Line, songToken.Column);
+        return new SongNode(parameters, statements, songToken.Line, songToken.Column);
     }
 
     /// <summary>
@@ -317,7 +317,7 @@ public class Parser
         var duration = ConsumeNumberOrFraction();
         var parameters = ParseParameters();
 
-        return new Note(noteValue.Value, startAt, duration.Value, parameters);
+        return new Note(noteValue.Value, startAt, duration.Value, parameters, noteValue.Line, noteValue.Column);
     }
 
     /// <summary>

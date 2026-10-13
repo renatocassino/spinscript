@@ -31,12 +31,22 @@ interface CompileError {
   error: string;
 }
 
+// Mirrors SpinScript.Wasm/Exports.cs Check(): positions are 0-indexed.
+interface Diagnostic {
+  severity: 'error' | 'warning';
+  code: string;
+  message: string;
+  line: number;
+  column: number;
+}
+
 function isCompileError(value: unknown): value is CompileError {
   return typeof value === 'object' && value !== null && 'error' in value;
 }
 
 interface SpinScriptExports {
   Parse(source: string): string;
+  Check(source: string): string;
   Compile(source: string): string;
 }
 
@@ -105,6 +115,7 @@ export class SpinScriptEditor extends LitElement {
   static properties = {
     code: { state: true },
     error: { state: true },
+    diagnostics: { state: true },
     isPlaying: { state: true },
     ready: { state: true },
     theme: { state: true },
@@ -112,6 +123,7 @@ export class SpinScriptEditor extends LitElement {
 
   declare code: string;
   declare error: string;
+  declare diagnostics: Diagnostic[];
   declare isPlaying: boolean;
   declare ready: boolean;
   declare theme: 'light' | 'dark';
@@ -275,12 +287,22 @@ export class SpinScriptEditor extends LitElement {
       align-items: center;
       justify-content: flex-end;
     }
+
+    .diagnostics ul {
+      margin: 0;
+      padding-left: 1.25rem;
+    }
+    .diagnostic-position {
+      font-family: var(--wa-font-family-code, monospace);
+      opacity: 0.7;
+    }
   `;
 
   constructor() {
     super();
     this.code = '';
     this.error = '';
+    this.diagnostics = [];
     this.isPlaying = false;
     this.ready = false;
     // The inline script in index.astro already applied wa-light/wa-dark to
@@ -316,16 +338,15 @@ export class SpinScriptEditor extends LitElement {
     const savedCode = localStorage.getItem(STORAGE_KEY);
     if (savedCode) {
       this.code = savedCode;
-      this.#tryParse(savedCode);
+      this.#check(savedCode);
     }
   }
 
-  #tryParse(source: string): void {
+  #check(source: string): void {
     if (!this.#spinscript) return;
 
     try {
-      const parsed: unknown = JSON.parse(this.#spinscript.Parse(source));
-      this.error = isCompileError(parsed) ? parsed.error : '';
+      this.diagnostics = JSON.parse(this.#spinscript.Check(source)) as Diagnostic[];
     } catch (e) {
       console.error(e);
       this.error = (e as Error).message;
@@ -339,7 +360,7 @@ export class SpinScriptEditor extends LitElement {
   #handleChange(): void {
     this.error = '';
     localStorage.setItem(STORAGE_KEY, this.code);
-    this.#tryParse(this.code);
+    this.#check(this.code);
   }
 
   #handleScroll(event: Event): void {
@@ -459,6 +480,19 @@ export class SpinScriptEditor extends LitElement {
     }
   }
 
+  #renderDiagnostics(severity: Diagnostic['severity'], variant: 'danger' | 'warning') {
+    const items = this.diagnostics.filter((d) => d.severity === severity);
+    if (items.length === 0) return null;
+
+    return html`<wa-callout class="diagnostics" variant=${variant} appearance="outlined" size="small">
+      <ul>
+        ${items.map(
+          (d) => html`<li><span class="diagnostic-position">${d.line + 1}:${d.column + 1}</span> ${d.message}</li>`,
+        )}
+      </ul>
+    </wa-callout>`;
+  }
+
   override render() {
     const statusVariant = this.isPlaying ? 'success' : this.ready ? 'neutral' : 'brand';
     const statusLabel = this.isPlaying ? 'Playing' : this.ready ? 'Ready' : 'Loading WASM…';
@@ -503,6 +537,7 @@ export class SpinScriptEditor extends LitElement {
         ${this.error
           ? html`<wa-callout variant="danger" appearance="outlined" size="small">${this.error}</wa-callout>`
           : null}
+        ${this.#renderDiagnostics('error', 'danger')} ${this.#renderDiagnostics('warning', 'warning')}
 
         <div slot="footer" class="toolbar">
           <wa-button

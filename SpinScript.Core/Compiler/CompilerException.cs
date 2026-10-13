@@ -1,20 +1,26 @@
 namespace SpinScript.Compiler;
 
-using SpinScript.Parser;
+using SpinScript.Analysis;
 
 public class CompilerException : Exception
 {
-    public IReadOnlyList<ParserException> Errors { get; }
+    /// <summary>Every diagnostic found, warnings included.</summary>
+    public IReadOnlyList<Diagnostic> Diagnostics { get; }
 
-    public CompilerException(IReadOnlyList<ParserException> errors)
-        : base(BuildMessage(errors))
+    /// <summary>Only the diagnostics that stopped compilation.</summary>
+    public IReadOnlyList<Diagnostic> Errors { get; }
+
+    public CompilerException(IReadOnlyList<Diagnostic> diagnostics)
+        : base(BuildMessage(diagnostics))
     {
-        Errors = errors;
+        Diagnostics = diagnostics;
+        Errors = diagnostics.Where(diagnostic => diagnostic.IsError).ToList();
     }
 
-    private static string BuildMessage(IReadOnlyList<ParserException> errors)
+    private static string BuildMessage(IReadOnlyList<Diagnostic> diagnostics)
     {
-        var details = string.Join(Environment.NewLine, errors.Select(error => $"- {error.Message}"));
-        return $"Parsing failed with {errors.Count} error(s):{Environment.NewLine}{details}";
+        var errors = diagnostics.Where(diagnostic => diagnostic.IsError).ToList();
+        var details = string.Join(Environment.NewLine, errors.Select(error => $"- {error}"));
+        return $"Compilation failed with {errors.Count} error(s):{Environment.NewLine}{details}";
     }
 }
