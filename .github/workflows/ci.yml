@@ -37,29 +37,26 @@ jobs:
         working-directory: spinscript-web
       - run: npm run build
         working-directory: spinscript-web
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-pages-artifact@v3
         with:
-          name: spinscript-web-dist
           path: spinscript-web/dist
 
+  # Mesmo esquema de play.cassino.dev / games.cassino.dev: GitHub Pages,
+  # sem token — o domínio vem de spinscript-web/public/CNAME.
   deploy:
-    name: Deploy (Cloudflare Pages)
+    name: Deploy (GitHub Pages)
     needs: [test, web]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
-      name: production
-      url: https://spinscript.cassino.dev
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: spinscript-web-dist
-          path: dist
-      - uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy dist --project-name=spinscript --branch=main
+      - id: deployment
+        uses: actions/deploy-pages@v4
 
   vscode:
     name: Extensão VS Code
