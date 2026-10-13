@@ -1,5 +1,7 @@
 namespace SpinScript.Parser.Ast;
 
+using System.Globalization;
+
 public abstract record AstNode;
 
 public record ProgramNode(List<AstNode> Statements) : AstNode;
@@ -11,14 +13,18 @@ public record SpinValue
     public record StringValue(string Value) : SpinValue;
     public record NumberValue(double Value) : SpinValue;
     public record BooleanValue(bool Value) : SpinValue;
+    // `sample=@kick` — points at a variable declared elsewhere; the compiler
+    // resolves it, the parser only records the name (without the '@').
+    public record ReferenceValue(string Name) : SpinValue;
 
     public override string ToString()
     {
         return this switch
         {
             StringValue s => $"\"{s.Value}\"",
-            NumberValue n => n.Value.ToString(),
-            BooleanValue b => b.Value.ToString(),
+            NumberValue n => n.Value.ToString(CultureInfo.InvariantCulture),
+            BooleanValue b => b.Value ? "true" : "false",
+            ReferenceValue r => $"@{r.Name}",
             _ => throw new InvalidOperationException("Unknown SpinValue type")
         };
     }

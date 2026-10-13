@@ -2,9 +2,12 @@ namespace SpinScript.Compiler;
 
 public abstract record Event;
 
+// Every time/duration below is in milliseconds from the start of the song.
 public record SoundEvent(string Sample, double Time, int Velocity) : Event;
 
-public record MelodyEvent(string Sample, double Time, double Duration, string Note, double rate) : Event;
+// `Rate` is the playback-rate multiplier that pitch-shifts the sample (recorded
+// at the melody's rootNote) up or down to `Note`: 2 = one octave up.
+public record MelodyEvent(string Sample, double Time, double Duration, string Note, double Rate) : Event;
 
 public record CompileResult(List<Event> Events);
 
@@ -47,8 +50,8 @@ public record CompileResult(List<Event> Events);
 //   stepMs = barMs / grid
 // ---------------------------------------------------------------------------
 
-public record SongConfiguration(int BPM, int beatsPerBar = 4)
+public record SongConfiguration(double BPM, int BeatsPerBar = 4)
 {
     public double BeatDurationMs => 60.0 / BPM * 1000.0;
-    public double BarDurationMs => BeatDurationMs * beatsPerBar;
-};
+    public double BarDurationMs => BeatDurationMs * BeatsPerBar;
+}

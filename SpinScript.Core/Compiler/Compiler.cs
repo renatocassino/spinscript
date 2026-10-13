@@ -1,80 +1,116 @@
 namespace SpinScript.Compiler;
 
-using System.Diagnostics.Contracts;
+using System.Globalization;
 using SpinScript.Parser;
 using SpinScript.Parser.Ast;
 
 public class Compiler
 {
     private readonly string _input;
-    private readonly Parser _parser;
 
-    private Dictionary<string, SpinValue> _references = new Dictionary<string, SpinValue>();
-    private Dictionary<string, BeatNode> _beats = new Dictionary<string, BeatNode>();
-    private Dictionary<string, MelodyNode> _melodies = new Dictionary<string, MelodyNode>();
-    private Dictionary<string, LoopNode> _loops = new Dictionary<string, LoopNode>();
-    private SongNode? song;
+    private readonly Dictionary<string, SpinValue> _references = [];
+    private readonly Dictionary<string, BeatNode> _beats = [];
+    private readonly Dictionary<string, MelodyNode> _melodies = [];
+    private readonly Dictionary<string, LoopNode> _loops = [];
+    private SongNode? _song;
 
-    private CompileResult _compileResult = new CompileResult(new List<Event>());
+    // Names of the loops currently being compiled, innermost last. Used to
+    // catch a loop that (directly or through another loop) plays itself,
+    // which would otherwise recurse until the stack overflows.
+    private readonly HashSet<string> _activeLoops = [];
+
+    private CompileResult _compileResult = new([]);
 
     public CompileResult compileResult => _compileResult;
 
-    private SongConfiguration _songConfiguration = new SongConfiguration(120);
+    private SongConfiguration _songConfiguration = new(120);
 
-    private int _currentTime = 0; // in milliseconds
+    private double _currentTime; // in milliseconds
 
     public Compiler(string input)
     {
         _input = input;
-        _parser = new Parser(input);
     }
 
-    public void Compile()
+    /// <summary>
+    /// Runs the whole pipeline (lexer → parser → compiler) and returns the
+    /// resulting timeline. Throws <see cref="SpinScript.Lexer.LexerException"/>
+    /// for a lexical error and <see cref="CompilerException"/> for anything
+    /// else, both carrying the line/column of the problem.
+    /// </summary>
+    public CompileResult Compile()
     {
-        var ast = _parser.Parse();
+        var ast = new Parser(_input).Parse();
         if (ast.HasErrors)
         {
             throw new CompilerException(ast.Errors);
         }
+
+        Reset();
         RegisterStatements(ast.Ast);
         UpdateConfiguration();
         CompileStatements();
+
+        // Stable sort: events at the same instant keep their source order.
+        _compileResult = new CompileResult([.. _compileResult.Events.OrderBy(EventTime)]);
+        return _compileResult;
     }
 
-    public void UpdateConfiguration()
+    private void Reset()
     {
-        _songConfiguration = new SongConfiguration(120); // Default BPM
+        _references.Clear();
+        _beats.Clear();
+        _melodies.Clear();
+        _loops.Clear();
+        _activeLoops.Clear();
+        _song = null;
+        _program = null;
+        _currentTime = 0;
+        _compileResult = new CompileResult([]);
+    }
+
+    private static double EventTime(Event e) => e switch
+    {
+        SoundEvent sound => sound.Time,
+        MelodyEvent melody => melody.Time,
+        _ => 0,
+    };
+
+    private void UpdateConfiguration()
+    {
+        var bpm = 120.0;
         if (_references.TryGetValue("bpm", out var bpmValue))
         {
-            if (bpmValue is SpinValue.NumberValue numberValue)
+            if (bpmValue is not SpinValue.NumberValue { Value: > 0 } number)
             {
-                _songConfiguration = new SongConfiguration((int)numberValue.Value);
-                Console.WriteLine($"BPM set to: {numberValue.Value}");
+                throw Error(FindAssignment("bpm"), $"@bpm must be a number greater than zero, got {bpmValue}.");
             }
-            else
-            {
-                throw new InvalidOperationException($"Expected NumberValue for bpm, got {bpmValue.GetType().Name}");
-            }
+            bpm = number.Value;
         }
 
-        if (_references.ContainsKey("beatsPerBar"))
+        var beatsPerBar = 4;
+        if (_references.TryGetValue("beatsPerBar", out var beatsPerBarValue))
         {
-            var beatsPerBarValue = _references["beatsPerBar"];
-            if (beatsPerBarValue is SpinValue.NumberValue numberValue)
+            if (beatsPerBarValue is not SpinValue.NumberValue { Value: > 0 } number || number.Value != Math.Floor(number.Value))
             {
-                _songConfiguration = new SongConfiguration(_songConfiguration.BPM, (int)numberValue.Value);
-                Console.WriteLine($"Beats per bar: {numberValue.Value}");
+                throw Error(FindAssignment("beatsPerBar"), $"@beatsPerBar must be a whole number greater than zero, got {beatsPerBarValue}.");
             }
-            else
-            {
-                throw new InvalidOperationException($"Expected NumberValue for beatsPerBar, got {beatsPerBarValue.GetType().Name}");
-            }
+            beatsPerBar = (int)number.Value;
         }
+
+        _songConfiguration = new SongConfiguration(bpm, beatsPerBar);
     }
+
+    private ProgramNode? _program;
+
+    private AssignmentNode? FindAssignment(string name) =>
+        _program?.Statements.OfType<AssignmentNode>().LastOrDefault(a => a.Name == name);
 
     private void RegisterStatements(ProgramNode ast)
     {
-        ast.Statements.ForEach(statement =>
+        _program = ast;
+
+        foreach (var statement in ast.Statements)
         {
             switch (statement)
             {
@@ -91,32 +127,32 @@ public class Compiler
                     _melodies[melody.Name] = melody;
                     break;
                 case PlayNode play:
-                    // Probably there are something wrong, because play exists only in loops and songs, so it should be handled in those cases.
-                    throw new InvalidOperationException("PlayNode should not be at the top level.");
-                    break;
+                    // `play` only makes sense inside a loop or the song: at the
+                    // top level there's no timeline position to play it at.
+                    throw Error(play, $"'play @{play.PatternName}' must be inside a loop or the song block.");
                 case SongNode song:
-                    if (this.song != null)
+                    if (_song != null)
                     {
-                        throw new InvalidOperationException("Multiple song nodes are not allowed.");
+                        throw Error(song, "Only one song block is allowed per file.");
                     }
-                    this.song = song;
+                    _song = song;
                     break;
                 default:
                     throw new InvalidOperationException($"Unknown statement type: {statement.GetType().Name}");
             }
-        });
+        }
     }
 
     private void CompileStatements()
     {
-        if (song == null)
+        if (_song == null)
         {
-            throw new InvalidOperationException("No song node found.");
+            throw new CompilerException("No song block found. Add `song { play @something; }` to hear anything.", 0, 0);
         }
 
-        _compileResult = new CompileResult(new List<Event>());
-
-        foreach (var statement in song.Statements)
+        // The song sequences everything it plays: each statement starts
+        // where the previous one ended.
+        foreach (var statement in _song.Statements)
         {
             CompileStatement(statement);
         }
@@ -126,84 +162,80 @@ public class Compiler
     {
         switch (statement)
         {
-            case AssignmentNode assignment:
-                Console.WriteLine($"Assignment: @{assignment.Name} = {assignment.Value}");
-                // _references[assignment.Name] = assignment.Value;
+            case AssignmentNode:
+                // Assignments inside loops/songs are accepted by the grammar
+                // but don't affect compilation (yet).
                 break;
             case BeatNode beat:
-                Console.WriteLine($"Beat: {beat.Name}");
-                CompileBeat(beat);
+                _currentTime += CompileBeat(beat);
                 break;
             case MelodyNode melody:
-                Console.WriteLine($"Melody: {melody.Name}");
-                CompileMelody(melody);
+                _currentTime += CompileMelody(melody);
                 break;
             case LoopNode loop:
-                Console.WriteLine($"Loop: {loop.Name}");
                 CompileLoop(loop);
                 break;
             case PlayNode play:
-                var isLoop = _loops.ContainsKey(play.PatternName);
-                var isBeat = _beats.ContainsKey(play.PatternName);
-                var isMelody = _melodies.ContainsKey(play.PatternName);
-                var parameters = play.Parameters;
-
-                var repeatCount = 1;
-                if (parameters.ContainsKey("repeat"))
-                {
-                    repeatCount = parameters["repeat"].AsInt();
-                }
-
-                AstNode beatOrLoop;
-                if (isLoop)
-                {
-                    beatOrLoop = _loops[play.PatternName];
-                } else if (isBeat)
-                {
-                    beatOrLoop = _beats[play.PatternName];
-                } else if (isMelody)
-                {
-                    beatOrLoop = _melodies[play.PatternName];
-                } else
-                {
-                    throw new InvalidOperationException($"PlayNode references unknown beat or loop: {play.PatternName}");
-                }
-
-                for (var i = 0; i < repeatCount; i++)
-                {
-                    Console.WriteLine($"Play: {play.PatternName} (repeat {i + 1}/{repeatCount})");
-                    if (isLoop || isBeat || isMelody)
-                    {
-                        Console.WriteLine($"Play Loop/Beat/Melody: {play.PatternName}");
-                        CompileStatement(beatOrLoop);
-                        if (isBeat)
-                        {
-                            // A repeated bare pattern behaves like its own
-                            // 1-bar loop: each repetition lands one bar
-                            // after the previous one instead of every
-                            // repeat stacking on the exact same bar.
-                            // Loops already advance _currentTime on their
-                            // own each time through CompileLoop, so this
-                            // only applies to plain patterns.
-                            _currentTime += (int)_songConfiguration.BarDurationMs;
-                        }
-                    }
-                    else
-                    {
-                        throw new InvalidOperationException($"PlayNode references unknown pattern or loop: {play.PatternName}");
-                    }
-                }
+                CompilePlay(play);
                 break;
             default:
                 throw new InvalidOperationException($"Unknown statement type: {statement.GetType().Name}");
         }
     }
 
+    private void CompilePlay(PlayNode play)
+    {
+        AstNode target;
+        if (_loops.TryGetValue(play.PatternName, out var loop))
+        {
+            target = loop;
+        }
+        else if (_beats.TryGetValue(play.PatternName, out var beat))
+        {
+            target = beat;
+        }
+        else if (_melodies.TryGetValue(play.PatternName, out var melody))
+        {
+            target = melody;
+        }
+        else
+        {
+            throw Error(play, $"'@{play.PatternName}' is not a beat, melody or loop declared at the top level.");
+        }
+
+        var repeatCount = GetWholeNumber(play.Parameters, "repeat", 1, play, min: 0);
+
+        // Each repetition picks up where the previous one ended: a beat
+        // advances one bar, a melody as many whole bars as it lasts, and a
+        // loop however long its own body takes (see CompileLoop).
+        for (var i = 0; i < repeatCount; i++)
+        {
+            CompileStatement(target);
+        }
+    }
+
     public void CompileLoop(LoopNode loop)
     {
-        var explicitBars = loop.Parameters.ContainsKey("bars")
-            ? loop.Parameters["bars"].AsInt()
-            : (int?)null;
+        if (!_activeLoops.Add(loop.Name))
+        {
+            throw Error(loop, $"Loop '@{loop.Name}' plays itself (directly or through another loop), which would never end.");
+        }
+
+        try
+        {
+            CompileLoopBody(loop);
+        }
+        finally
+        {
+            _activeLoops.Remove(loop.Name);
+        }
+    }
+
+    private void CompileLoopBody(LoopNode loop)
+    {
+        double? explicitBars = loop.Parameters.ContainsKey("bars")
+            ? GetPositiveNumber(loop.Parameters, "bars", 1, loop)
+            : null;
         var startTime = _currentTime;
         var furthestTime = startTime;
 
@@ -234,13 +266,13 @@ public class Compiler
             // Explicit `bars=` is an authoritative override: force the loop
             // to occupy exactly that many bars, regardless of what its body
             // actually advanced _currentTime by.
-            _currentTime = startTime + explicitBars.Value * (int)_songConfiguration.BarDurationMs;
+            _currentTime = startTime + explicitBars.Value * _songConfiguration.BarDurationMs;
         }
         else if (furthestTime == startTime)
         {
             // Nothing in the body advanced time on its own — default to a
             // single bar.
-            _currentTime = startTime + (int)_songConfiguration.BarDurationMs;
+            _currentTime = startTime + _songConfiguration.BarDurationMs;
         }
         else
         {
@@ -262,128 +294,207 @@ public class Compiler
         };
     }
 
-    public int CompileMelody(MelodyNode melody)
+    /// <summary>
+    /// Emits one <see cref="MelodyEvent"/> per note, offset by the current
+    /// timeline position, and returns how long the melody occupies on the
+    /// timeline: its last note's end, rounded up to whole bars (at least
+    /// one), so a melody repeated or followed by something else stays on
+    /// the bar grid.
+    /// </summary>
+    public double CompileMelody(MelodyNode melody)
     {
         var parameters = melody.Parameters;
 
-        var rootNote = parameters.ContainsKey("rootNote") ? parameters["rootNote"].AsString() : "C4";
-        var sample = parameters.ContainsKey("sample") ? parameters["sample"].AsString() : null;
-        if (sample != null && sample.StartsWith("@"))
+        var rootNote = GetString(parameters, "rootNote", "C4", melody);
+        if (!Lexer.Lexer.IsNote(rootNote))
         {
-            var referencedBeatName = sample.Substring(1);
-            if (_references.ContainsKey(referencedBeatName))
-            {
-                var referencedPattern = _references[referencedBeatName];
-                sample = referencedPattern.AsString();
-            }
-            else
-            {
-                throw new InvalidOperationException($"Referenced beat '{referencedBeatName}' not found.");
-            }
+            throw Error(melody, $"rootNote '{rootNote}' of melody '@{melody.Name}' is not a note like C4 or F#3.");
         }
 
+        // `instrument` is accepted as an alias of `sample` (older examples use it).
+        var sampleKey = parameters.ContainsKey("sample") ? "sample" : "instrument";
+        var sample = GetRequiredString(parameters, sampleKey, melody, $"Melody '@{melody.Name}' needs a sample, e.g. (sample=@piano).");
+
         var barMs = _songConfiguration.BarDurationMs;
-        Console.WriteLine($"[DEBUG] - {barMs} - {melody.Notes}");
+        var melodyEnd = 0.0;
 
         foreach (var note in melody.Notes)
         {
-            var noteNotation = note.NoteName;
-            var startTimeNotation = FractionToTime(note.FractionStart);
-            var durationTimeNotation = startTimeNotation + FractionToTime(note.FractionDuration);
-            // Add parameters in the future
+            var start = FractionToTime(note.FractionStart);
+            var duration = FractionToTime(note.FractionDuration);
+            var rate = CalcRate(note.NoteName, rootNote);
 
-            // Calc metrics here
-            var rate = CalcRate(noteNotation, rootNote);
-            Console.WriteLine($"Add note {noteNotation} - {startTimeNotation}-{durationTimeNotation} {rate}");
-            var melodyEvent = new MelodyEvent(sample ?? "unknown", startTimeNotation, startTimeNotation + durationTimeNotation, noteNotation, rate);
-            _compileResult.Events.Add(melodyEvent);
+            _compileResult.Events.Add(new MelodyEvent(sample, _currentTime + start, duration, note.NoteName, rate));
+            melodyEnd = Math.Max(melodyEnd, start + duration);
         }
 
-        return 0;
+        // Tiny epsilon so floating point noise (e.g. 3 × 1/3 bar) doesn't
+        // round a melody that ends exactly on a bar line up to the next one.
+        var bars = Math.Max(1, Math.Ceiling(melodyEnd / barMs - 1e-9));
+        return bars * barMs;
     }
 
-    static public int NoteToMidi(string note)
+    private static readonly Dictionary<char, int> NoteOffsets = new()
     {
-        var offsets = new Dictionary<char, int>
-        {
-            ['C'] = 0, ['D'] = 2, ['E'] = 4, ['F'] = 5,
-            ['G'] = 7, ['A'] = 9, ['B'] = 11,
-        };
+        ['C'] = 0, ['D'] = 2, ['E'] = 4, ['F'] = 5,
+        ['G'] = 7, ['A'] = 9, ['B'] = 11,
+    };
 
-        int offset = offsets[note[0]];   // note[0] é char, dicionário é <char,int>
-        int octaveIndex = 1;              // onde começa o dígito da oitava
+    /// <summary>
+    /// Converts a note name to its MIDI number (C4 = 60). The octave is
+    /// optional and defaults to 4, so <c>Db</c> is the same as <c>Db4</c>.
+    /// </summary>
+    public static int NoteToMidi(string note)
+    {
+        var offset = NoteOffsets[note[0]];
+        var octaveIndex = 1; // onde começa o dígito da oitava
 
         if (note.Length > 1 && note[1] == '#') { offset += 1; octaveIndex = 2; }
         else if (note.Length > 1 && note[1] == 'b') { offset -= 1; octaveIndex = 2; }
 
-        int octave = int.Parse(note[octaveIndex..]);   // o resto é a oitava
+        var octave = octaveIndex < note.Length
+            ? int.Parse(note[octaveIndex..], CultureInfo.InvariantCulture)
+            : 4;
 
         return (octave + 1) * 12 + offset;
     }
 
-    static public double CalcRate(string desiredNote, string rootNote)
+    public static double CalcRate(string desiredNote, string rootNote)
     {
-        int semitones = NoteToMidi(desiredNote) - NoteToMidi(rootNote);
+        var semitones = NoteToMidi(desiredNote) - NoteToMidi(rootNote);
         return Math.Pow(2, semitones / 12.0);
     }
 
+    /// <summary>
+    /// Converts a time written in bars (<c>1</c>, <c>1/4</c>, <c>3/2</c>) to
+    /// milliseconds at the current BPM.
+    /// </summary>
     public double FractionToTime(string fraction)
     {
-        if (fraction.Contains("/"))
+        if (fraction.Contains('/'))
         {
             var nums = fraction.Split('/');
 
-            if (double.TryParse(nums[0], out double n1) && double.TryParse(nums[1], out double n2))
+            if (double.TryParse(nums[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var n1) &&
+                double.TryParse(nums[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var n2) &&
+                n2 != 0)
             {
                 return n1 / n2 * _songConfiguration.BarDurationMs;
             }
         }
-
-        if (int.TryParse(fraction, out var f)) {
-            return _songConfiguration.BarDurationMs * f;
+        else if (double.TryParse(fraction, NumberStyles.Float, CultureInfo.InvariantCulture, out var bars))
+        {
+            return _songConfiguration.BarDurationMs * bars;
         }
 
-        throw new InvalidOperationException($"Invalid time notation: '{fraction}'. Expected a fraction like '1/4' or a plain integer.");
+        throw new InvalidOperationException($"Invalid time notation: '{fraction}'. Expected a fraction like '1/4' or a plain number.");
     }
 
-    public int CompileBeat(BeatNode beat)
+    /// <summary>
+    /// Emits one <see cref="SoundEvent"/> per step, offset by the current
+    /// timeline position, and returns how long a beat lasts: always one bar.
+    /// </summary>
+    public double CompileBeat(BeatNode beat)
     {
         var parameters = beat.Parameters;
 
-        var bpm = _songConfiguration.BPM;
-        var beatsPerBar = _songConfiguration.beatsPerBar;
-
-        var sample = parameters.ContainsKey("sample") ? parameters["sample"].AsString() : null;
-        Console.WriteLine($">>>>>>>>>>Compiling Pattern: {beat.Name} - Sample: {sample} - BPM: {bpm} - BeatsPerBar: {beatsPerBar}");
-        // se sample começar com @, então é uma referência a um pattern, e não um sample direto
-        if (sample != null && sample.StartsWith("@"))
-        {
-            var referencedBeatName = sample.Substring(1);
-            if (_references.ContainsKey(referencedBeatName))
-            {
-                var referencedPattern = _references[referencedBeatName];
-                sample = referencedPattern.AsString();
-            }
-            else
-            {
-                throw new InvalidOperationException($"Referenced beat '{referencedBeatName}' not found.");
-            }
-        }
-        var grid = parameters.ContainsKey("grid") ? parameters["grid"].AsInt() : 16;
-        var beatMs = _songConfiguration.BeatDurationMs;
+        var sample = GetRequiredString(parameters, "sample", beat, $"Beat '@{beat.Name}' needs a sample, e.g. (sample=@kick).");
+        var grid = GetWholeNumber(parameters, "grid", 16, beat, min: 1);
         var barMs = _songConfiguration.BarDurationMs;
         var stepMs = barMs / grid;
 
-        Console.WriteLine($"Beat: {beat.Name} - Sample: {sample} - Grid: {grid} - Steps: {string.Join(", ", beat.Steps)} - BPM: {bpm}");
-
-        foreach (var statement in beat.Steps.OrderBy(x => x))
+        foreach (var step in beat.Steps.Distinct().Order())
         {
-            var startTime = _currentTime + (int)(stepMs * (statement - 1));
-            var soundEvent = new SoundEvent(sample ?? "unknown", startTime, 100);
-            _compileResult.Events.Add(soundEvent);
-            Console.WriteLine($"Step: {statement} - Sample: {sample} - StartTime: {startTime}ms");
+            if (step < 1 || step > grid)
+            {
+                throw Error(beat, $"Step {step} of beat '@{beat.Name}' is outside its grid (1 to {grid}).");
+            }
+
+            var startTime = _currentTime + stepMs * (step - 1);
+            _compileResult.Events.Add(new SoundEvent(sample, startTime, 100));
         }
 
-        return (int)_songConfiguration.BarDurationMs;
+        return barMs;
+    }
+
+    // -----------------------------------------------------------------------
+    // Parameter helpers: read a parameter, resolve `@references`, check its
+    // type, and report a positioned error when something's off.
+    // -----------------------------------------------------------------------
+
+    private SpinValue? Resolve(Dictionary<string, SpinValue> parameters, string key, AstNode node)
+    {
+        if (!parameters.TryGetValue(key, out var value))
+        {
+            return null;
+        }
+
+        var seen = new HashSet<string>();
+        while (value is SpinValue.ReferenceValue reference)
+        {
+            if (!seen.Add(reference.Name) || !_references.TryGetValue(reference.Name, out var referenced))
+            {
+                throw Error(node, $"'@{reference.Name}' (used in {key}=) is not declared. Declare it with `@{reference.Name} = ...;`.");
+            }
+            value = referenced;
+        }
+
+        return value;
+    }
+
+    private string GetString(Dictionary<string, SpinValue> parameters, string key, string fallback, AstNode node)
+    {
+        return Resolve(parameters, key, node) switch
+        {
+            null => fallback,
+            SpinValue.StringValue s => s.Value,
+            var other => throw Error(node, $"Parameter '{key}' must be a string, got {other}."),
+        };
+    }
+
+    private string GetRequiredString(Dictionary<string, SpinValue> parameters, string key, AstNode node, string missingMessage)
+    {
+        return Resolve(parameters, key, node) switch
+        {
+            null => throw Error(node, missingMessage),
+            SpinValue.StringValue s => s.Value,
+            var other => throw Error(node, $"Parameter '{key}' must be a string, got {other}."),
+        };
+    }
+
+    private double GetPositiveNumber(Dictionary<string, SpinValue> parameters, string key, double fallback, AstNode node)
+    {
+        return Resolve(parameters, key, node) switch
+        {
+            null => fallback,
+            SpinValue.NumberValue { Value: > 0 } n => n.Value,
+            var other => throw Error(node, $"Parameter '{key}' must be a number greater than zero, got {other}."),
+        };
+    }
+
+    private int GetWholeNumber(Dictionary<string, SpinValue> parameters, string key, int fallback, AstNode node, int min)
+    {
+        return Resolve(parameters, key, node) switch
+        {
+            null => fallback,
+            SpinValue.NumberValue n when n.Value >= min && n.Value == Math.Floor(n.Value) => (int)n.Value,
+            var other => throw Error(node, $"Parameter '{key}' must be a whole number of at least {min}, got {other}."),
+        };
+    }
+
+    private static CompilerException Error(AstNode? node, string message)
+    {
+        var (line, column) = node switch
+        {
+            AssignmentNode n => (n.Line, n.Column),
+            BeatNode n => (n.Line, n.Column),
+            MelodyNode n => (n.Line, n.Column),
+            LoopNode n => (n.Line, n.Column),
+            PlayNode n => (n.Line, n.Column),
+            SongNode n => (n.Line, n.Column),
+            _ => (0, 0),
+        };
+
+        return new CompilerException(message, line, column);
     }
 }
