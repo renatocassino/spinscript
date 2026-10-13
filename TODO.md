@@ -48,7 +48,10 @@ grupo.
 - [ ] **Dinâmica:** `velocity`/`volume` por beat, por step
       (`{ 1:127, 5:80 }` ou `{ X.x. }` com maiúscula = acento) e por nota.
 - [ ] **Swing / groove:** implementar `swing=0.2` no `play` e no `beat`.
-- [ ] **Acordes:** `[C4 E4 G4] 0 1/2` ou nomes (`Cmaj7 0 1`).
+- [x] **Acordes:** `[C4 E4 G4] 0 1/2` ou nomes (`C4:maj7 0 1` — com `:`,
+      porque `C7` seria ambíguo com a nota dó na oitava 7).
+- [ ] **Inversões e voicings:** `C4:maj/E` (baixo na terça), `C4:maj7^1`,
+      `strum=1/32` (arpejar o acorde em vez de tocar tudo junto).
 - [ ] **Escalas e graus:** `melody @m (scale="C minor") { 1 0 1/4, 3 +0 1/4 }`.
 - [ ] **Transposição:** `play @lead (transpose=+12)` / `(transpose=-2)`.
 - [ ] **Pausas explícitas:** `_ 1/4` (ou `rest 1/4`) em vez de calcular

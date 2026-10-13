@@ -2,6 +2,7 @@ namespace SpinScript.Parser;
 
 using Ast;
 using SpinScript.Lexer;
+using SpinScript.Music;
 
 public record ParseResult(ProgramNode Ast, IReadOnlyList<ParserException> Errors)
 {
@@ -120,6 +121,16 @@ public class Parser
     /// leftover closing brace as an unrelated, confusingly-positioned
     /// second error.
     /// </summary>
+    private void SkipUntilAny(params TokenType[] stopTypes)
+    {
+        while (_index < _tokens.Count &&
+               !stopTypes.Contains(_tokens[_index].Type) &&
+               _tokens[_index].Type != TokenType.EOF)
+        {
+            _index++;
+        }
+    }
+
     private void SkipUntil(TokenType stopType)
     {
         while (_index < _tokens.Count &&
@@ -309,15 +320,80 @@ public class Parser
         return Check(TokenType.FRACTION) ? Consume(TokenType.FRACTION) : Consume(TokenType.NUMBER);
     }
 
-    private Note ParseNote(Note? previousNote)
+    /// <summary>
+    /// Parses one melody entry: a single note (<c>C4 0 1/4</c>), an explicit
+    /// chord (<c>[C4 E4 G4] 0 1/2</c>) or a named chord
+    /// (<c>C4:maj7 0 1/2</c>). A chord is expanded right here into one
+    /// <see cref="Note"/> per pitch, all sharing the same start, duration
+    /// and parameters — so, like the '+' sugar, nothing downstream has to
+    /// know chords exist, and a '+' after a chord is relative to its end.
+    /// </summary>
+    private List<Note> ParseNote(Note? previousNote)
     {
-        var noteValue = Consume(TokenType.NOTE);
+        var pitches = ParsePitches();
 
         var startAt = ParseNoteStartAt(previousNote);
         var duration = ConsumeNumberOrFraction();
         var parameters = ParseParameters();
 
-        return new Note(noteValue.Value, startAt, duration.Value, parameters, noteValue.Line, noteValue.Column);
+        return pitches
+            .Select(pitch => new Note(pitch.Value, startAt, duration.Value, parameters, pitch.Line, pitch.Column))
+            .ToList();
+    }
+
+    private List<Token> ParsePitches()
+    {
+        if (Check(TokenType.CHORD))
+        {
+            return ExpandChord(Consume(TokenType.CHORD));
+        }
+
+        if (!Check(TokenType.LBRACKET))
+        {
+            return [Consume(TokenType.NOTE)];
+        }
+
+        var open = Consume(TokenType.LBRACKET);
+        var pitches = new List<Token>();
+        while (!Check(TokenType.RBRACKET))
+        {
+            if (Check(TokenType.EOF))
+            {
+                throw new ParserException("Unclosed chord: expected ']'.", open.Line, open.Column);
+            }
+
+            pitches.Add(Consume(TokenType.NOTE));
+            Match(TokenType.COMMA); // [C4, E4, G4] reads fine too
+        }
+        Consume(TokenType.RBRACKET);
+
+        if (pitches.Count == 0)
+        {
+            throw new ParserException("A chord needs at least one note, e.g. [C4 E4 G4].", open.Line, open.Column);
+        }
+
+        return pitches;
+    }
+
+    // "C4:maj7" -> C4, E4, G4, B4 (all reported at the chord's position).
+    private static List<Token> ExpandChord(Token chord)
+    {
+        var separator = chord.Value.IndexOf(':', StringComparison.Ordinal);
+        var root = chord.Value[..separator];
+        var quality = chord.Value[(separator + 1)..];
+
+        if (!char.IsDigit(root[^1]))
+        {
+            throw new ParserException(
+                $"Chord root '{root}' needs an octave, e.g. '{root}4:{quality}'.",
+                chord.Line, chord.Column);
+        }
+
+        var notes = Chords.Expand(root, quality) ?? throw new ParserException(
+            $"Unknown chord quality '{quality}' in '{chord.Value}'. Valid ones: {string.Join(", ", Chords.Qualities.Keys)}.",
+            chord.Line, chord.Column);
+
+        return notes.Select(note => chord with { Type = TokenType.NOTE, Value = note }).ToList();
     }
 
     /// <summary>
@@ -406,28 +482,30 @@ public class Parser
             return melody;
         }
 
-        try
+        Note? previous = null;
+        while (true)
         {
-            melody.Add(ParseNote(previousNote: null));
-
-            while (Match(TokenType.COMMA))
+            try
             {
-                if (Check(TokenType.RBRACE))
-                {
-                    break; // trailing comma
-                }
-
-                melody.Add(ParseNote(melody[^1]));
+                var notes = ParseNote(previous);
+                melody.AddRange(notes);
+                previous = notes[^1];
             }
-        }
-        catch (ParserException exception)
-        {
-            // Ex.: uma vírgula duplicada ou faltando no meio da lista de
-            // notas. Registra o erro na posição real do token problemático
-            // e recupera só até o '}' da própria melodia — sem escapar pro
-            // bloco (loop/song) que a contém.
-            _errors.Add(exception);
-            SkipUntil(TokenType.RBRACE);
+            catch (ParserException exception)
+            {
+                // Ex.: um acorde inválido ou uma vírgula duplicada. Registra
+                // o erro na posição real e pula só até o fim desta nota (a
+                // próxima ',' ou o '}' da melodia), pra que as notas seguintes
+                // também sejam verificadas — sem escapar pro bloco (loop/song)
+                // que a contém.
+                _errors.Add(exception);
+                SkipUntilAny(TokenType.COMMA, TokenType.RBRACE);
+            }
+
+            if (!Match(TokenType.COMMA) || Check(TokenType.RBRACE))
+            {
+                break; // fim da lista, ou vírgula final antes do '}'
+            }
         }
 
         return melody;

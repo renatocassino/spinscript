@@ -1157,4 +1157,30 @@ public class TokenizerTests
 
         Assert.Equal(expectedTypes, tokens.Select(t => t.Type));
     }
+
+    [Theory]
+    [InlineData("C4:maj7")]
+    [InlineData("A3:m")]
+    [InlineData("Bb3:7")]
+    [InlineData("F#4:m7b5")]
+    [InlineData("C:maj")] // sem oitava: o parser que reclama
+    public void TokenizeNamedChordAsSingleToken(string chord)
+    {
+        var tokens = new Lexer($"{chord} 0 1").Tokenize();
+
+        Assert.Equal(TokenType.CHORD, tokens[0].Type);
+        Assert.Equal(chord, tokens[0].Value);
+        Assert.Equal(TokenType.NUMBER, tokens[1].Type);
+    }
+
+    [Fact]
+    public void TokenizeExplicitChordBrackets()
+    {
+        var tokens = new Lexer("[C4 E4 G4] 0 1/2").Tokenize();
+
+        Assert.Equal(
+            [TokenType.LBRACKET, TokenType.NOTE, TokenType.NOTE, TokenType.NOTE, TokenType.RBRACKET, TokenType.NUMBER, TokenType.FRACTION, TokenType.EOF],
+            tokens.Select(t => t.Type));
+        Assert.Equal(9, tokens[4].Column);
+    }
 }

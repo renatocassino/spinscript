@@ -63,7 +63,7 @@ public class Lexer
 
             if (char.IsLetter(currentChar))
             {
-                if (TryAddBoolean() || TryAddKeyword() || TryAddNote() || TryAddPatternGrid())
+                if (TryAddBoolean() || TryAddKeyword() || TryAddChord() || TryAddNote() || TryAddPatternGrid())
                 {
                     continue;
                 }
@@ -86,6 +86,8 @@ public class Lexer
                 case '/': SkipComment(); break;
                 case ',': AddToken(TokenType.COMMA, currentChar.ToString()); break;
                 case '+': AddToken(TokenType.PLUS, currentChar.ToString()); break;
+                case '[': AddToken(TokenType.LBRACKET, currentChar.ToString()); break;
+                case ']': AddToken(TokenType.RBRACKET, currentChar.ToString()); break;
                 default:
                     throw new LexerException($"Unexpected character '{currentChar}'", _line, _column);
             }
@@ -227,6 +229,34 @@ public class Lexer
     private bool TryAddKeyword() => TryAddFromDictionary(Keywords, IsIdentifierChar);
 
     private bool TryAddNote() => TryAddWordToken(IsNoteChar, CheckIsNote, TokenType.NOTE);
+
+    /// <summary>
+    /// A note immediately followed by <c>:</c> and a quality, e.g.
+    /// <c>C4:maj7</c>, becomes one <see cref="TokenType.CHORD"/> token. The
+    /// quality isn't validated here — the parser does that, so an unknown
+    /// one is a recoverable syntax error with a list of valid names.
+    /// </summary>
+    private bool TryAddChord()
+    {
+        var (root, startIndex, startLine, startColumn) = ScanWord(IsNoteChar);
+
+        if (!CheckIsNote(root) || _index >= _input.Length || _input[_index] != ':')
+        {
+            ResetTo(startIndex, startLine, startColumn);
+            return false;
+        }
+
+        _index++;
+        _column++;
+        while (_index < _input.Length && IsNoteChar(_input[_index]))
+        {
+            _index++;
+            _column++;
+        }
+
+        _tokens.Add(new Token(TokenType.CHORD, _input[startIndex.._index], startLine, startColumn));
+        return true;
+    }
 
     private bool TryAddPatternGrid() => TryAddWordToken(IsPatternGridChar, CheckIsPatternGrid, TokenType.PATTERN_GRID);
 

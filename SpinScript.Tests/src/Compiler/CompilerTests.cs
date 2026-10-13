@@ -301,4 +301,29 @@ song {
         Assert.Equal([2000.0, 3000.0], notes.Select(n => n.Time));
         Assert.Equal([500.0, 500.0], notes.Select(n => n.Duration));
     }
+
+    [Fact]
+    public void ChordNotesStartTogetherWithTheirOwnPitch()
+    {
+        var input = """
+@bpm = 120;
+@piano = "piano.wav";
+
+melody @chords (sample=@piano) { C4:maj 0 1/2, [A3 C4] +0 1/2 };
+
+song {
+    play @chords;
+}
+""";
+        var compiler = new Compiler(input);
+        compiler.Compile();
+
+        var notes = compiler.compileResult.Events.OfType<MelodyEvent>().ToList();
+
+        Assert.Equal([0.0, 0.0, 0.0, 1000.0, 1000.0], notes.Select(n => n.Time));
+        Assert.Equal(["C4", "E4", "G4", "A3", "C4"], notes.Select(n => n.Note));
+        // rate relativo ao rootNote padrão (C4): E4 = 4 semitons acima, A3 = 3 abaixo
+        Assert.Equal(Math.Pow(2, 4 / 12.0), notes[1].rate, 6);
+        Assert.Equal(Math.Pow(2, -3 / 12.0), notes[3].rate, 6);
+    }
 }

@@ -457,10 +457,9 @@ play @song1 (bpm=120, volume=80);
         Assert.Equal(2, error.Line);
         Assert.Equal(27, error.Column); // a segunda vírgula, não a primeira
 
-        // As notas válidas antes do erro continuam disponíveis na AST.
+        // As notas válidas, antes e depois do erro, continuam na AST.
         var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
-        Assert.Equal(6, melody.Notes.Count);
-        Assert.Equal(["G5", "F5", "G5", "E5", "G5", "D5"], melody.Notes.Select(n => n.NoteName));
+        Assert.Equal(["G5", "F5", "G5", "E5", "G5", "D5", "G5"], melody.Notes.Select(n => n.NoteName));
     }
 
     [Fact]
@@ -528,8 +527,8 @@ play @song1 (bpm=120, volume=80);
         Assert.Equal(2, loop.Statements.Count);
 
         var melody = Assert.IsType<MelodyNode>(loop.Statements[0]);
-        Assert.Equal(2, melody.Notes.Count); // notas antes do erro foram preservadas
-        Assert.Equal(["G5", "F5"], melody.Notes.Select(n => n.NoteName));
+        // notas antes e depois do erro foram preservadas
+        Assert.Equal(["G5", "F5", "G5", "E5", "G5", "D5", "G5"], melody.Notes.Select(n => n.NoteName));
 
         // O 'play' continua aninhado dentro do loop, não vazou pro topo.
         var play = Assert.IsType<PlayNode>(loop.Statements[1]);
@@ -666,7 +665,7 @@ play @song1 (bpm=120, volume=80);
     [Fact]
     public void ParseMelodyWithRelativeStartMissingOffsetValueThrowsAtOffendingToken()
     {
-        var input = "melody @m { G4 0 1/4, F4 +, G4 1/4 };";
+        var input = "melody @m { G4 0 1/4, F4 +, G4 1/4 1/4 };";
 
         var program = new Parser(input).Parse();
 
@@ -674,6 +673,10 @@ play @song1 (bpm=120, volume=80);
         var error = Assert.Single(program.Errors);
         Assert.Equal(0, error.Line);
         Assert.Equal(26, error.Column); // posição da vírgula que veio no lugar do offset
+
+        // a nota seguinte, válida, continua sendo lida
+        var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
+        Assert.Equal(["G4", "G4"], melody.Notes.Select(n => n.NoteName));
     }
 
     [Fact]
@@ -706,8 +709,71 @@ play @song1 (bpm=120, volume=80);
         var error = Assert.Single(program.Errors);
         Assert.Equal(1, error.Line);
 
+        // E4 continua relativo ao fim do F4 (a última nota válida)
         var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
-        Assert.Equal(2, melody.Notes.Count);
-        Assert.Equal(["0", "1/4"], melody.Notes.Select(n => n.FractionStart));
+        Assert.Equal(["0", "1/4", "1/2"], melody.Notes.Select(n => n.FractionStart));
+    }
+
+    [Fact]
+    public void ParseExplicitChordExpandsIntoNotesSharingStartAndDuration()
+    {
+        var program = new Parser("melody @m { [C4 E4 G4] 0 1/2, [A3, C4] +0 1/4 };").Parse();
+
+        Assert.False(program.HasErrors);
+        var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
+
+        Assert.Equal(["C4", "E4", "G4", "A3", "C4"], melody.Notes.Select(n => n.NoteName));
+        Assert.Equal(["0", "0", "0", "1/2", "1/2"], melody.Notes.Select(n => n.FractionStart));
+        Assert.Equal(["1/2", "1/2", "1/2", "1/4", "1/4"], melody.Notes.Select(n => n.FractionDuration));
+        Assert.Equal([13, 16, 19], melody.Notes.Take(3).Select(n => n.Column)); // cada nota na sua posição
+    }
+
+    [Theory]
+    [InlineData("C4:maj", new[] { "C4", "E4", "G4" })]
+    [InlineData("A3:m", new[] { "A3", "C4", "E4" })]
+    [InlineData("G3:7", new[] { "G3", "B3", "D4", "F4" })]
+    [InlineData("Bb3:maj7", new[] { "Bb3", "D4", "F4", "A4" })]
+    [InlineData("F#4:dim", new[] { "F#4", "A4", "C5" })]
+    [InlineData("D4:sus4", new[] { "D4", "G4", "A4" })]
+    public void ParseNamedChordExpandsToItsNotes(string chord, string[] expected)
+    {
+        var program = new Parser($"melody @m {{ {chord} 0 1 }};").Parse();
+
+        Assert.False(program.HasErrors);
+        var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
+        Assert.Equal(expected, melody.Notes.Select(n => n.NoteName));
+        Assert.All(melody.Notes, n => Assert.Equal(12, n.Column)); // posição do acorde
+    }
+
+    [Fact]
+    public void ParseRelativeStartAfterChordIsRelativeToTheChordsEnd()
+    {
+        var program = new Parser("melody @m { C4:maj 1/4 1/2, D4 +0 1/4 };").Parse();
+
+        var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
+        Assert.Equal("3/4", melody.Notes[^1].FractionStart);
+    }
+
+    [Theory]
+    [InlineData("C4:maj8 0 1", "Unknown chord quality 'maj8'")]
+    [InlineData("C:m 0 1", "needs an octave")]
+    [InlineData("[] 0 1", "at least one note")]
+    public void ParseInvalidChordReportsError(string entry, string message)
+    {
+        var program = new Parser($"melody @m {{ {entry} }};").Parse();
+
+        var error = Assert.Single(program.Errors);
+        Assert.Contains(message, error.Message);
+        Assert.Equal(12, error.Column);
+    }
+
+    [Fact]
+    public void ParseMelodyReportsEveryInvalidNoteNotJustTheFirst()
+    {
+        var program = new Parser("melody @m { C4:x 0 1, E4 1 1, C:m 2 1, G4 3 1 };").Parse();
+
+        Assert.Equal(2, program.Errors.Count);
+        var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
+        Assert.Equal(["E4", "G4"], melody.Notes.Select(n => n.NoteName));
     }
 }

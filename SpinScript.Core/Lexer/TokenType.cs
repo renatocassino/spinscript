@@ -24,4 +24,7 @@ public enum TokenType
     IDENT,
     SONG,
     PLUS, // '+', usado na sintaxe relativa de início de nota (+1/8)
+    CHORD, // C4:maj7, A3:m — fundamental + ':' + tipo do acorde
+    LBRACKET, // '[' de um acorde explícito: [C4 E4 G4]
+    RBRACKET,
 }

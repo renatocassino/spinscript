@@ -59,6 +59,9 @@ const TOKEN_REGEX = new RegExp(
   [
     String.raw`(?<comment>/\*[\s\S]*?\*/|//.*)`,
     String.raw`(?<string>"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')`,
+    // A named chord (C4:maj7, G3:7). Before `number` so the quality's
+    // digits aren't highlighted on their own. Mirrors Lexer.TryAddChord.
+    String.raw`(?<chord>\b[A-G][#b]?[0-9]?:[A-Za-z0-9#]+)`,
     // Must come before `number` so a fraction like `1/4` is captured whole
     // instead of just matching its numerator.
     String.raw`(?<fraction>\b[0-9]+/[0-9]+\b)`,
@@ -269,7 +272,8 @@ export class SpinScriptEditor extends LitElement {
       color: #d73a49;
       font-weight: bold;
     }
-    .tok-note {
+    .tok-note,
+    .tok-chord {
       color: #0086b3;
     }
     .tok-patternGrid {

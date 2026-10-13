@@ -6,6 +6,7 @@
   "patterns": [
     { "include": "#comments" },
     { "include": "#strings" },
+    { "include": "#chords" },
     { "include": "#fractions" },
     { "include": "#numbers" },
     { "include": "#keywords" },
@@ -91,6 +92,16 @@
       ]
     },
 
+    "chords": {
+      "comment": "Named chords: a note, ':' and a quality (C4:maj7, A3:m, G3:7). Must come before numbers so the '7' in 'G3:7' isn't read as a number. Mirrors Lexer.TryAddChord.",
+      "patterns": [
+        {
+          "name": "constant.character.note.chord.spin",
+          "match": "\\b[A-G][#b]?[0-9]?:[A-Za-z0-9#]+"
+        }
+      ]
+    },
+
     "notes": {
       "comment": "Musical notes: a letter A-G, optionally followed by a single octave digit (A4), an accidental (C#, Db), or both (Eb8, F#9). Mirrors Lexer.CheckIsNote.",
       "patterns": [
@@ -164,6 +175,14 @@
         {
           "name": "punctuation.section.braces.end.spin",
           "match": "\\}"
+        },
+        {
+          "name": "punctuation.section.brackets.begin.spin",
+          "match": "\\["
+        },
+        {
+          "name": "punctuation.section.brackets.end.spin",
+          "match": "\\]"
         }
       ]
     }

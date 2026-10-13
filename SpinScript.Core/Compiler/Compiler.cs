@@ -1,6 +1,7 @@
 namespace SpinScript.Compiler;
 
 using SpinScript.Analysis;
+using SpinScript.Music;
 using SpinScript.Parser;
 using SpinScript.Parser.Ast;
 
@@ -293,24 +294,7 @@ public class Compiler
         return 0;
     }
 
-    static public int NoteToMidi(string note)
-    {
-        var offsets = new Dictionary<char, int>
-        {
-            ['C'] = 0, ['D'] = 2, ['E'] = 4, ['F'] = 5,
-            ['G'] = 7, ['A'] = 9, ['B'] = 11,
-        };
-
-        int offset = offsets[note[0]];   // note[0] é char, dicionário é <char,int>
-        int octaveIndex = 1;              // onde começa o dígito da oitava
-
-        if (note.Length > 1 && note[1] == '#') { offset += 1; octaveIndex = 2; }
-        else if (note.Length > 1 && note[1] == 'b') { offset -= 1; octaveIndex = 2; }
-
-        int octave = int.Parse(note[octaveIndex..]);   // o resto é a oitava
-
-        return (octave + 1) * 12 + offset;
-    }
+    static public int NoteToMidi(string note) => Pitch.ToMidi(note);
 
     static public double CalcRate(string desiredNote, string rootNote)
     {

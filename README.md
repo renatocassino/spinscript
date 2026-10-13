@@ -389,6 +389,44 @@ before it to be relative to) and always resolves to a plain absolute
 fraction — the rest of the language, including the compiler, never sees
 the `+` at all.
 
+#### Chords
+
+Anywhere a note goes, a chord can go instead: several pitches that share
+the same start and duration. Write the notes explicitly in brackets, or
+name the chord as `ROOT:quality`:
+
+```spin
+melody @progression (sample=@piano) {
+    [C4 E4 G4]  0  1/2,    // explicit: any notes you want (commas optional)
+    A3:m        +0 1/2,    // named: A3 C4 E4
+    F3:maj7     +0 1/2,    // F3 A3 C4 E4
+    G3:7        +0 1/2,    // G3 B3 D4 F4
+};
+```
+
+The `:` is what tells a chord apart from a note: `G7` is the note G in
+octave 7, `G3:7` is a G dominant seventh chord. The root needs an octave,
+and the chord is stacked upward from it. Quality names are case-sensitive
+(`m` is minor):
+
+| Quality | Notes above the root | Quality | Notes above the root |
+|---|---|---|---|
+| `maj` | major triad | `m6` | minor sixth |
+| `m`, `min` | minor triad | `7` | dominant seventh |
+| `dim` | diminished | `maj7` | major seventh |
+| `aug` | augmented | `m7` | minor seventh |
+| `sus2`, `sus4` | suspended | `mmaj7` | minor-major seventh |
+| `5` | power chord (root + fifth) | `dim7`, `m7b5` | diminished / half-diminished seventh |
+| `6` | major sixth | `aug7`, `7sus4` | augmented / suspended seventh |
+| `add9`, `9`, `maj9`, `m9` | ninth chords | | |
+
+Like the `+` sugar, a chord is resolved by the parser: it becomes one note
+per pitch in the AST, so the compiler and the CLI timeline just see
+several notes starting together. A `+` after a chord is relative to the
+chord's end. An unknown quality or a root without an octave is a syntax
+error, and each broken entry in a melody is reported on its own, without
+hiding the rest of the list.
+
 ### `loop`
 
 A `loop` stacks patterns and sets a duration in bars.
