@@ -11,6 +11,7 @@
     { "include": "#numbers" },
     { "include": "#keywords" },
     { "include": "#notes" },
+    { "include": "#rests" },
     { "include": "#patternGrids" },
     { "include": "#variables" },
     { "include": "#parameters" },
@@ -98,6 +99,16 @@
         {
           "name": "constant.character.note.chord.spin",
           "match": "\\b[A-G][#b]?[0-9]?:[A-Za-z0-9#]+"
+        }
+      ]
+    },
+
+    "rests": {
+      "comment": "A rest in a melody: a lone '_' (not part of a name like @main_groove). Mirrors the REST token.",
+      "patterns": [
+        {
+          "name": "constant.character.rest.spin",
+          "match": "(?<![A-Za-z0-9_@])_(?![A-Za-z0-9_])"
         }
       ]
     },

@@ -327,18 +327,62 @@ public class Parser
     /// <see cref="Note"/> per pitch, all sharing the same start, duration
     /// and parameters — so, like the '+' sugar, nothing downstream has to
     /// know chords exist, and a '+' after a chord is relative to its end.
+    /// <c>Last</c> is what the next entry's '+' is relative to: the last
+    /// note parsed, or — for a rest, which adds no notes — the rest itself.
     /// </summary>
-    private List<Note> ParseNote(Note? previousNote)
+    private (List<Note> Notes, Note Last) ParseNote(Note? previousNote)
     {
+        if (Check(TokenType.REST))
+        {
+            return ParseRest(previousNote);
+        }
+
         var pitches = ParsePitches();
 
         var startAt = ParseNoteStartAt(previousNote);
         var duration = ConsumeNumberOrFraction();
         var parameters = ParseParameters();
 
-        return pitches
+        var notes = pitches
             .Select(pitch => new Note(pitch.Value, startAt, duration.Value, parameters, pitch.Line, pitch.Column))
             .ToList();
+        return (notes, notes[^1]);
+    }
+
+    /// <summary>
+    /// Parses a rest, <c>_ 1/4</c>: silence that starts where the previous
+    /// entry ends (or at <c>0</c> when it's the first one) and lasts the
+    /// given length. It produces no note — it only moves the point the next
+    /// <c>+offset</c> is relative to, so <c>C4 0 1/4, _ 1/4, D4 +0 1/4</c>
+    /// starts D4 at <c>1/2</c>.
+    /// </summary>
+    private (List<Note> Notes, Note Last) ParseRest(Note? previousNote)
+    {
+        var rest = Consume(TokenType.REST);
+
+        if (Check(TokenType.PLUS))
+        {
+            throw new ParserException(
+                "A rest always starts where the previous note ends; write just its length, e.g. '_ 1/4'.",
+                Peek().Line, Peek().Column);
+        }
+
+        var duration = ConsumeNumberOrFraction();
+
+        if (Check(TokenType.NUMBER) || Check(TokenType.FRACTION))
+        {
+            throw new ParserException(
+                "A rest only takes a length, e.g. '_ 1/4' — it always starts where the previous note ends.",
+                Peek().Line, Peek().Column);
+        }
+
+        var start = previousNote is null
+            ? "0"
+            : TimeFraction.Add(
+                TimeFraction.Parse(previousNote.FractionStart),
+                TimeFraction.Parse(previousNote.FractionDuration)).ToString();
+
+        return ([], new Note("_", start, duration.Value, [], rest.Line, rest.Column));
     }
 
     private List<Token> ParsePitches()
@@ -487,9 +531,9 @@ public class Parser
         {
             try
             {
-                var notes = ParseNote(previous);
+                var (notes, last) = ParseNote(previous);
                 melody.AddRange(notes);
-                previous = notes[^1];
+                previous = last;
             }
             catch (ParserException exception)
             {

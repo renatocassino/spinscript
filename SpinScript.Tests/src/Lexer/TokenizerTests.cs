@@ -1183,4 +1183,23 @@ public class TokenizerTests
             tokens.Select(t => t.Type));
         Assert.Equal(9, tokens[4].Column);
     }
+
+    [Fact]
+    public void TokenizeRest()
+    {
+        var tokens = new Lexer("C4 0 1/4, _ 1/4").Tokenize();
+
+        var rest = tokens.Single(t => t.Type == TokenType.REST);
+        Assert.Equal("_", rest.Value);
+        Assert.Equal(10, rest.Column);
+        Assert.Equal(TokenType.FRACTION, tokens[tokens.IndexOf(rest) + 1].Type);
+    }
+
+    [Fact]
+    public void TokenizeUnderscoreInsideReferenceIsNotARest()
+    {
+        var tokens = new Lexer("@main_groove").Tokenize();
+
+        Assert.DoesNotContain(tokens, t => t.Type == TokenType.REST);
+    }
 }

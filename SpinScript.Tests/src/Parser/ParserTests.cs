@@ -776,4 +776,57 @@ play @song1 (bpm=120, volume=80);
         var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
         Assert.Equal(["E4", "G4"], melody.Notes.Select(n => n.NoteName));
     }
+
+    [Fact]
+    public void ParseRestMovesTheNextRelativeStartWithoutAddingANote()
+    {
+        var program = new Parser("melody @m { C5 0 1/4, C5 +0 1/4, _ 1/4, C5 +0 1/4 };").Parse();
+
+        Assert.False(program.HasErrors);
+        var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
+        Assert.Equal(["0", "1/4", "3/4"], melody.Notes.Select(n => n.FractionStart));
+    }
+
+    [Fact]
+    public void ParseRestAsFirstEntryStartsAtZero()
+    {
+        var program = new Parser("melody @m { _ 1/2, D4 +0 1/4 };").Parse();
+
+        var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
+        Assert.Equal("1/2", Assert.Single(melody.Notes).FractionStart);
+    }
+
+    [Fact]
+    public void ParseConsecutiveRestsAddUp()
+    {
+        var program = new Parser("melody @m { C4 0 1/4, _ 1/4, _ 1/8, D4 +0 1/4 };").Parse();
+
+        var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
+        Assert.Equal("5/8", melody.Notes[^1].FractionStart);
+    }
+
+    [Fact]
+    public void ParseRestAfterChordStartsAtTheChordsEnd()
+    {
+        var program = new Parser("melody @m { C4:maj 0 1/2, _ 1/4, D4 +0 1/4 };").Parse();
+
+        var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
+        Assert.Equal("3/4", melody.Notes[^1].FractionStart);
+    }
+
+    [Theory]
+    [InlineData("_ +1/4", 2, "write just its length")]
+    [InlineData("_ 0 1/4", 4, "only takes a length")]
+    public void ParseRestWithAStartReportsError(string rest, int column, string message)
+    {
+        var program = new Parser($"melody @m {{ {rest}, C4 1 1/4 }};").Parse();
+
+        var error = Assert.Single(program.Errors);
+        Assert.Contains(message, error.Message);
+        Assert.Equal(12 + column, error.Column);
+
+        // a nota seguinte continua sendo lida
+        var melody = Assert.IsType<MelodyNode>(program.Ast.Statements[0]);
+        Assert.Equal("C4", Assert.Single(melody.Notes).NoteName);
+    }
 }

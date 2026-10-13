@@ -326,4 +326,26 @@ song {
         Assert.Equal(Math.Pow(2, 4 / 12.0), notes[1].rate, 6);
         Assert.Equal(Math.Pow(2, -3 / 12.0), notes[3].rate, 6);
     }
+
+    [Fact]
+    public void RestLeavesSilenceBetweenNotes()
+    {
+        // @bpm=120 => 1 bar = 2000ms, 1/4 = 500ms
+        var input = """
+@bpm = 120;
+@piano = "piano.wav";
+
+melody @lead (sample=@piano) { C5 0 1/4, _ 1/4, D5 +0 1/4 };
+
+song {
+    play @lead;
+}
+""";
+        var compiler = new Compiler(input);
+        compiler.Compile();
+
+        var notes = compiler.compileResult.Events.OfType<MelodyEvent>().ToList();
+        Assert.Equal([0.0, 1000.0], notes.Select(n => n.Time));
+        Assert.Equal(["C5", "D5"], notes.Select(n => n.Note));
+    }
 }

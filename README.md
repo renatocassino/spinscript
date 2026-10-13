@@ -427,6 +427,26 @@ chord's end. An unknown quality or a root without an octave is a syntax
 error, and each broken entry in a melody is reported on its own, without
 hiding the rest of the list.
 
+#### Rests
+
+`_` followed by a length is a rest: silence that starts where the previous
+entry ends (or at `0` if it's the first one). It plays nothing — it just
+moves the point the next `+offset` counts from, so you don't have to fold
+the silence into an offset by hand:
+
+```spin
+melody @phrase (sample=@piano) {
+    // DO DO DO . DO DO DO
+    C5 0 1/4, C5 +0 1/4, C5 +0 1/4,
+    _ 1/4,                          // same as writing the next start as +1/4
+    C5 +0 1/4, C5 +0 1/4, C5 +0 1/4,
+};
+```
+
+Consecutive rests add up, and a rest after a chord starts at the chord's
+end. A rest only takes a length — `_ +1/4` or `_ 0 1/4` is a syntax error
+— and, like chords, it's resolved by the parser: it never reaches the AST.
+
 ### `loop`
 
 A `loop` stacks patterns and sets a duration in bars.

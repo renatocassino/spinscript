@@ -69,6 +69,8 @@ const TOKEN_REGEX = new RegExp(
     String.raw`(?<keyword>\b(?:song|loop|beat|melody|play)\b)`,
     // A letter A-G, optionally followed by an octave digit (A4), an
     // accidental (C#, Db), or both (Eb8, F#9). Mirrors Lexer.CheckIsNote.
+    // A lone '_' is a melody rest; inside a name (@main_groove) it isn't.
+    String.raw`(?<rest>(?<![A-Za-z0-9_@])_(?![A-Za-z0-9_]))`,
     String.raw`(?<note>\b[A-G](?:[#b][0-9]?|[0-9])?\b)`,
     // A beat grid like x...x..., x|x|x|x, x...|x..x.|.x.xx: a lowercase 'x'
     // followed by any run of 'x', '.' and '|' with no spaces. Mirrors
@@ -275,6 +277,10 @@ export class SpinScriptEditor extends LitElement {
     .tok-note,
     .tok-chord {
       color: #0086b3;
+    }
+    .tok-rest {
+      color: #0086b3;
+      opacity: 0.6;
     }
     .tok-patternGrid {
       color: #b08800;

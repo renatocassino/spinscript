@@ -54,8 +54,11 @@ grupo.
       `strum=1/32` (arpejar o acorde em vez de tocar tudo junto).
 - [ ] **Escalas e graus:** `melody @m (scale="C minor") { 1 0 1/4, 3 +0 1/4 }`.
 - [ ] **Transposição:** `play @lead (transpose=+12)` / `(transpose=-2)`.
-- [ ] **Pausas explícitas:** `_ 1/4` (ou `rest 1/4`) em vez de calcular
+- [x] **Pausas explícitas:** `_ 1/4` (ou `rest 1/4`) em vez de calcular
       o `+offset` na mão.
+- [ ] **Início implícito nas notas:** `C4 1/4` (só duração) valendo
+      `C4 +0 1/4` — com as pausas, a maioria das melodias deixaria de
+      precisar de `+0` em toda nota.
 - [ ] **Ligaduras / legato e staccato** por nota.
 - [ ] **Compasso no meio da música:** `@beatsPerBar` e `@bpm` por
       `loop`/trecho; mudança gradual (`accelerando`, `ritardando`).

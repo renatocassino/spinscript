@@ -27,4 +27,5 @@ public enum TokenType
     CHORD, // C4:maj7, A3:m — fundamental + ':' + tipo do acorde
     LBRACKET, // '[' de um acorde explícito: [C4 E4 G4]
     RBRACKET,
+    REST, // '_' — pausa numa melody: _ 1/4
 }
